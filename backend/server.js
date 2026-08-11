@@ -17,11 +17,23 @@ const asyncHandler = fn => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// Health check endpoints for Render / monitoring
+const healthHandler = (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        repo: `${process.env.GITHUB_OWNER || ''}/${process.env.GITHUB_REPO || ''}`
+    });
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+
 // POST /api/sync — Trigger live repository sync
 app.post('/api/sync', asyncHandler(async (req, res) => {
     syncRepository().catch(err => console.error('Sync failed:', err.message));
     res.json({ message: 'Repository sync initiated' });
 }));
+
 
 
 // GET /api/files?path=
