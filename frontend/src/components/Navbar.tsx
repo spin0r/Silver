@@ -95,13 +95,25 @@ const Navbar = () => {
                             to="/"
                             className="flex items-center space-x-2 text-gray-900 transition-opacity hover:opacity-70 dark:text-white"
                         >
-                            <img
-                                src="https://cdn.jsdelivr.net/gh/Fluxonide/Google-Drive-Index@master/public/icons/64.png"
-                                alt="Logo"
-                                className="h-6 w-6"
-                            />
-                            <span className="hidden font-semibold sm:inline">{window.SITE_NAME || 'File Index'}</span>
+                            <svg
+                                aria-hidden="true"
+                                focusable="false"
+                                data-prefix="fas"
+                                data-icon="cube"
+                                className="h-6 w-6 text-gray-900 dark:text-white"
+
+                                role="img"
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 512 512"
+                            >
+                                <path
+                                    fill="currentColor"
+                                    d="M234.5 5.7c13.9-5 29.1-5 43.1 0l192 68.6C495 83.4 512 107.5 512 134.6l0 242.9c0 27-17 51.2-42.5 60.3l-192 68.6c-13.9 5-29.1 5-43.1 0l-192-68.6C17 428.6 0 404.5 0 377.4L0 134.6c0-27 17-51.2 42.5-60.3l192-68.6zM256 66L82.3 128 256 190l173.7-62L256 66zm32 368.6l160-57.1 0-188L288 246.6l0 188z"
+                                ></path>
+                            </svg>
+                            <span className="hidden font-semibold sm:inline">{window.SITE_NAME || 'Notes'}</span>
                         </Link>
+
 
                         {/* Drive Switcher Dropdown */}
                         {hasMultipleDrives && (
