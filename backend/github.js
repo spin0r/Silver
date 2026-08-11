@@ -220,6 +220,17 @@ async function getFileContent(filePath) {
     const arrayBuffer = await response.arrayBuffer();
     const data = Buffer.from(arrayBuffer);
 
+    // Save fetched file to local storage so subsequent local requests serve instantly
+    try {
+      const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
+      const localPath = path.join(STORAGE_DIR, sanitizedPath);
+      const dir = path.dirname(localPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(localPath, data);
+    } catch (e) {}
+
     // Determine content type from extension
     const ext = path.extname(filePath).toLowerCase();
     const contentTypeMap = {

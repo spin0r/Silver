@@ -65,6 +65,54 @@ app.get('/api/search', asyncHandler(async (req, res) => {
     }
 }));
 
+// Helper to serve raw file content with HTTP Range request support
+function sendRawFile(req, res, filePath, data, contentType, isDownload = false) {
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const ext = path.extname(filePath).toLowerCase();
+    const finalContentType = contentType || (ext === '.pdf' ? 'application/pdf' : 'application/octet-stream');
+    res.setHeader('Content-Type', finalContentType);
+
+    let filename = path.basename(filePath);
+    try {
+        filename = decodeURIComponent(filename);
+    } catch (e) {}
+
+    if (isDownload || req.query.download === 'true') {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    } else {
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+
+    // Handle HTTP Range header for streaming PDFs & videos reliably on Chrome / Safari / Edge
+    const range = req.headers.range;
+    if (range && data) {
+        const total = data.length;
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+        
+        if (start >= total || end >= total) {
+            res.setHeader('Content-Range', `bytes */${total}`);
+            return res.status(416).send('Requested Range Not Satisfiable');
+        }
+        
+        const chunksize = (end - start) + 1;
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Length', chunksize);
+        return res.send(data.slice(start, end + 1));
+    }
+
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Length', data.length);
+    return res.send(data);
+}
+
 // GET /api/raw?path= — Serve local file content or fallback to GitHub
 app.get('/api/raw', asyncHandler(async (req, res) => {
     const filePath = req.query.path;
@@ -89,27 +137,22 @@ app.get('/api/raw', asyncHandler(async (req, res) => {
         } catch {
             fileInfo = await getGitHubFileContent(filePath);
         }
-
-        const { data, contentType } = fileInfo;
-        
-        res.removeHeader('X-Frame-Options');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-
-        if (contentType) {
-            res.setHeader('Content-Type', contentType);
-        }
-        
-        const filename = path.basename(filePath);
-        if (req.query.download === 'true') {
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        } else {
-            res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-        }
-        
-        res.send(data);
+        return sendRawFile(req, res, filePath, fileInfo.data, fileInfo.contentType, req.query.download === 'true');
     } catch (err) {
         console.error('Error serving file:', err.message);
-        res.redirect(rawUrl);
+        try {
+            const token = process.env.GITHUB_TOKEN;
+            const headers = token ? { Authorization: `token ${token}` } : {};
+            const ghRes = await fetch(rawUrl, { headers });
+            if (ghRes.ok) {
+                const ab = await ghRes.arrayBuffer();
+                const buf = Buffer.from(ab);
+                const ext = path.extname(filePath).toLowerCase();
+                const contentType = ext === '.pdf' ? 'application/pdf' : (ghRes.headers.get('content-type') || 'application/octet-stream');
+                return sendRawFile(req, res, filePath, buf, contentType, req.query.download === 'true');
+            }
+        } catch (e) {}
+        return res.status(404).json({ error: 'File not found' });
     }
 }));
 
@@ -118,6 +161,7 @@ app.get('/*.*', asyncHandler(async (req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/assets/') || req.path === '/favicon.ico') {
         return next();
     }
+
     const filePath = req.path.substring(1);
     try {
         let fileInfo;
@@ -126,16 +170,25 @@ app.get('/*.*', asyncHandler(async (req, res, next) => {
         } catch {
             fileInfo = await getGitHubFileContent(filePath);
         }
-        const { data, contentType } = fileInfo;
-        res.removeHeader('X-Frame-Options');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        if (contentType) {
-            res.setHeader('Content-Type', contentType);
-        }
-        const filename = path.basename(filePath);
-        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-        return res.send(data);
+        return sendRawFile(req, res, filePath, fileInfo.data, fileInfo.contentType);
     } catch (err) {
+        try {
+            const sanitizedPath = String(filePath).replace(/^\/?\d+:\/?/, '').replace(/^\/+/, '');
+            const owner = process.env.GITHUB_OWNER;
+            const repo = process.env.GITHUB_REPO;
+            const branch = process.env.GITHUB_BRANCH || 'main';
+            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${sanitizedPath}`;
+            const token = process.env.GITHUB_TOKEN;
+            const headers = token ? { Authorization: `token ${token}` } : {};
+            const ghRes = await fetch(rawUrl, { headers });
+            if (ghRes.ok) {
+                const ab = await ghRes.arrayBuffer();
+                const buf = Buffer.from(ab);
+                const ext = path.extname(filePath).toLowerCase();
+                const contentType = ext === '.pdf' ? 'application/pdf' : (ghRes.headers.get('content-type') || 'application/octet-stream');
+                return sendRawFile(req, res, filePath, buf, contentType);
+            }
+        } catch (e) {}
         return next();
     }
 }));
