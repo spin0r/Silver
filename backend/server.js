@@ -2,6 +2,7 @@ require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { getContents: getGitHubContents, searchFiles: searchGitHubFiles, getFileContent: getGitHubFileContent } = require('./github');
 const { syncRepository, getLocalContents, getLocalFileContent, searchLocalFiles } = require('./sync');
 const { startTelegramBot } = require('./telegram');
