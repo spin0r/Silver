@@ -139,15 +139,24 @@ app.get('/*.*', asyncHandler(async (req, res, next) => {
     }
 }));
 
-// Serve frontend in production
-if (process.env.NODE_ENV === 'production') {
-    const frontendDist = path.join(__dirname, '../frontend/dist');
+// Serve frontend static assets if dist exists
+const frontendDist = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+    console.log(`✨ Serving static frontend from ${frontendDist}`);
     app.use(express.static(frontendDist));
     
-    app.get('*', (req, res) => {
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api/') || req.path === '/health') {
+            return next();
+        }
         res.sendFile(path.join(frontendDist, 'index.html'));
     });
+} else {
+    app.get('/', (req, res) => {
+        res.send('File Index Backend API is running. Build frontend to view web UI.');
+    });
 }
+
 
 // Error handling middleware
 app.use((err, req, res, next) => {
