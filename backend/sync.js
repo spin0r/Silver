@@ -66,6 +66,38 @@ async function syncRepository() {
 
     console.log(`📦 Found ${files.length} total files in repository. Synchronizing...`);
 
+    // Build a Set of all repo file paths (using forward slashes, normalized)
+    const repoFilePaths = new Set(files.map(item => item.path.replace(/\\/g, '/')));
+
+    // --- DELETE local files not in the repo ---
+    let deletedCount = 0;
+    function deleteOrphans(dir, relBase) {
+      if (!fs.existsSync(dir)) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          deleteOrphans(fullPath, relPath);
+          // Remove directory if now empty
+          try {
+            const remaining = fs.readdirSync(fullPath);
+            if (remaining.length === 0) {
+              fs.rmdirSync(fullPath);
+              console.log(`🗑️  Removed empty dir: ${relPath}`);
+            }
+          } catch (e) {}
+        } else {
+          if (!repoFilePaths.has(relPath)) {
+            fs.unlinkSync(fullPath);
+            deletedCount++;
+            console.log(`🗑️  Deleted: ${relPath}`);
+          }
+        }
+      }
+    }
+    deleteOrphans(STORAGE_DIR, '');
+
     let downloadedCount = 0;
     let skippedCount = 0;
     const fileIndexMap = {};
@@ -82,7 +114,14 @@ async function syncRepository() {
       let exists = false;
       if (fs.existsSync(localPath)) {
         const stats = fs.statSync(localPath);
-        if (item.size && stats.size === item.size) {
+        // Compare by SHA if available, otherwise by size
+        const existingIndex = fs.existsSync(INDEX_FILE)
+          ? (() => { try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8')); } catch(e) { return {}; } })()
+          : {};
+        const cached = existingIndex[relPath];
+        if (cached && cached.sha === item.sha) {
+          exists = true;
+        } else if (!item.sha && item.size && stats.size === item.size) {
           exists = true;
         }
       }
@@ -116,7 +155,7 @@ async function syncRepository() {
     }
 
     fs.writeFileSync(INDEX_FILE, JSON.stringify(fileIndexMap, null, 2), 'utf-8');
-    console.log(`✅ Local Repository Sync Complete! Downloaded: ${downloadedCount}, Up to date: ${skippedCount}. Total files indexed: ${Object.keys(fileIndexMap).length}`);
+    console.log(`✅ Local Repository Sync Complete! Downloaded: ${downloadedCount}, Up to date: ${skippedCount}, Deleted: ${deletedCount}. Total files indexed: ${Object.keys(fileIndexMap).length}`);
   } catch (error) {
     console.error(`❌ Sync error:`, error.message);
   }
