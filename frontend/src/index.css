@@ -1,0 +1,163 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --color-body-bg: theme('colors.gray.50');
+        --color-box-bg: white;
+    }
+
+    .dark {
+        --color-body-bg: #27272A;
+        --color-box-bg: #18181B;
+    }
+
+    body {
+        @apply text-gray-900 dark:text-gray-100;
+        background-color: var(--color-body-bg);
+    }
+}
+
+@layer utilities {
+
+    /* Hide scrollbar while allowing scroll */
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
+
+.glass {
+    @apply bg-white/80 backdrop-blur-md;
+}
+
+.dark .glass {
+    background-color: rgba(24, 24, 27, 0.8);
+    backdrop-filter: blur(12px);
+}
+
+/* Smooth transitions for all interactive elements */
+.transition-smooth {
+    @apply transition-all duration-150 ease-in-out;
+}
+
+/* Checkbox styling */
+.form-check-input {
+    @apply h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 accent-blue-600 dark:accent-blue-500;
+}
+
+.dark .form-check-input {
+    color-scheme: dark;
+    background-color: #27272A;
+    border-color: #4B5563;
+}
+
+
+/* Dark mode hover states */
+.dark-hover-bg {
+    @apply dark:hover:bg-gray-850;
+}
+
+/* Markdown styling */
+.markdown-body {
+    @apply text-gray-900 dark:text-gray-100;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    @apply font-semibold text-gray-900 dark:text-white;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.3;
+}
+
+.markdown-body h1 {
+    @apply text-2xl border-b border-gray-200 dark:border-gray-700 pb-2;
+}
+
+.markdown-body h2 {
+    @apply text-xl border-b border-gray-200 dark:border-gray-700 pb-2;
+}
+
+.markdown-body h3 {
+    @apply text-lg;
+}
+
+.markdown-body h4 {
+    @apply text-base;
+}
+
+.markdown-body p {
+    margin-bottom: 1em;
+}
+
+.markdown-body a {
+    @apply text-blue-600 dark:text-blue-400 hover:underline;
+}
+
+.markdown-body code {
+    @apply font-mono text-sm bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded;
+}
+
+.markdown-body pre {
+    @apply bg-gray-100 dark:bg-gray-800 rounded-lg p-4 overflow-x-auto my-4;
+}
+
+.markdown-body pre code {
+    @apply bg-transparent p-0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    @apply pl-6 my-4;
+}
+
+.markdown-body ul {
+    list-style-type: disc;
+}
+
+.markdown-body ol {
+    list-style-type: decimal;
+}
+
+.markdown-body li {
+    @apply my-1;
+}
+
+.markdown-body blockquote {
+    @apply border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-4 text-gray-600 dark:text-gray-400 italic;
+}
+
+.markdown-body table {
+    @apply w-full border-collapse my-4;
+}
+
+.markdown-body th,
+.markdown-body td {
+    @apply border border-gray-300 dark:border-gray-600 px-4 py-2 text-left;
+}
+
+.markdown-body th {
+    @apply bg-gray-100 dark:bg-gray-800 font-semibold;
+}
+
+.markdown-body img {
+    @apply max-w-full rounded-lg my-4;
+}
+
+.markdown-body hr {
+    @apply border-gray-300 dark:border-gray-600 my-6;
+}

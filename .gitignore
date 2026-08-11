@@ -1,0 +1,67 @@
+# Node.js Dependencies
+node_modules/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Local Data Storage & Cached Repo Sync
+backend/data/
+
+# Build Outputs
+dist/
+build/
+out/
+frontend/dist/
+*.tsbuildinfo
+
+# Python Cache & Virtual Envs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.python-version
+
+# Temporary & Garbage Files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+
+# OS Garbage Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE & Editor Trash
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosattr
+*.sln.docstates
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
