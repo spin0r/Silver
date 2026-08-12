@@ -1,4 +1,5 @@
 import { DriveFile, FolderListResponse, SearchResponse } from '../types'
+import { clearMarkdownCache } from '../components/previews/MarkdownPreview'
 
 export const API_BASE = '/api'
 
@@ -20,6 +21,7 @@ const searchCache = new Map<string, { response: SearchResponse; timestamp: numbe
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes TTL
 
 export function clearFolderCache(targetPath?: string) {
+    clearMarkdownCache()
     if (targetPath) {
         let normalizedPath = targetPath.replace(/^\/?\d+:\/?/, '')
         if (normalizedPath.startsWith('/')) normalizedPath = normalizedPath.substring(1)
@@ -28,6 +30,24 @@ export function clearFolderCache(targetPath?: string) {
         folderCache.clear()
         searchCache.clear()
     }
+}
+
+export async function triggerRepositorySync(): Promise<{ success: boolean; message: string }> {
+    clearFolderCache()
+    clearMarkdownCache()
+    const response = await fetch(`${API_BASE}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || `Sync failed: ${response.status}`)
+    }
+
+    clearFolderCache()
+    clearMarkdownCache()
+    return response.json()
 }
 
 export async function fetchFolderContents(

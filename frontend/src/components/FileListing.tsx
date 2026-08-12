@@ -39,7 +39,7 @@ const FileListing = () => {
     const isFilePath = () => checkIsFilePath(location.pathname)
 
     // Fetch folder contents
-    const fetchFiles = async (pageToken?: string) => {
+    const fetchFiles = async (pageToken?: string, forceRefresh = false) => {
         if (!pageToken) {
             setLoading(true)
             setFiles([])
@@ -50,7 +50,7 @@ const FileListing = () => {
         setError(null)
 
         try {
-            const data = await fetchFolderContents(path)
+            const data = await fetchFolderContents(path, forceRefresh)
 
             const fetchedFiles = (data.data?.files || []).filter(f => f.name !== '.gitkeep')
 
@@ -72,11 +72,21 @@ const FileListing = () => {
         }
     }
 
-    // Refetch when path changes
+    // Refetch when path changes or when repoSynced event is triggered
     useEffect(() => {
         if (!isFilePath()) {
             fetchFiles()
         }
+    }, [location.pathname])
+
+    useEffect(() => {
+        const handleRepoSynced = () => {
+            if (!isFilePath()) {
+                fetchFiles(undefined, true)
+            }
+        }
+        window.addEventListener('repoSynced', handleRepoSynced)
+        return () => window.removeEventListener('repoSynced', handleRepoSynced)
     }, [location.pathname])
 
 

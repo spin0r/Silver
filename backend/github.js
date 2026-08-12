@@ -1,6 +1,7 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const { Octokit } = require('@octokit/rest');
 const cache = require('./cache');
-const path = require('path');
 
 const getOctokit = () => {
   return new Octokit({

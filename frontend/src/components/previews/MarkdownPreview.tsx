@@ -12,6 +12,10 @@ interface MarkdownPreviewProps {
 
 const markdownTextCache = new Map<string, string>()
 
+export function clearMarkdownCache() {
+    markdownTextCache.clear()
+}
+
 const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone = true }) => {
     const [content, setContent] = useState<string>('')
     const [loading, setLoading] = useState(true)
@@ -19,10 +23,16 @@ const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone 
 
     useEffect(() => {
         const fetchContent = async () => {
-            const url = file.link || `${basePath}${file.name}`
-            
-            if (markdownTextCache.has(url)) {
-                setContent(markdownTextCache.get(url)!)
+            let baseUrl = file.link
+            if (!baseUrl || !baseUrl.startsWith('/api/')) {
+                const filePath = file.path || `${basePath.replace(/^\/+/, '')}${file.name}`
+                baseUrl = `/api/raw?path=${encodeURIComponent(filePath)}`
+            }
+
+            const cacheKey = `${baseUrl}_${file.modifiedTime || file.id || ''}`
+
+            if (markdownTextCache.has(cacheKey)) {
+                setContent(markdownTextCache.get(cacheKey)!)
                 setLoading(false)
                 return
             }
@@ -30,12 +40,22 @@ const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone 
             setLoading(true)
             setError(null)
             try {
-                const response = await fetch(url)
+                const fetchUrl = baseUrl.includes('?') 
+                    ? `${baseUrl}&_t=${encodeURIComponent(file.modifiedTime || Date.now())}`
+                    : `${baseUrl}?_t=${encodeURIComponent(file.modifiedTime || Date.now())}`
+
+                const response = await fetch(fetchUrl, { cache: 'no-cache' })
                 if (!response.ok) {
                     throw new Error(`Failed to fetch: ${response.status}`)
                 }
+                const contentType = response.headers.get('content-type') || ''
                 const text = await response.text()
-                markdownTextCache.set(url, text)
+
+                if (contentType.includes('text/html') || text.trim().toLowerCase().startsWith('<!doctype html') || text.trim().toLowerCase().startsWith('<html')) {
+                    throw new Error('Server returned HTML instead of Markdown content')
+                }
+
+                markdownTextCache.set(cacheKey, text)
                 setContent(text)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load content')
@@ -45,7 +65,7 @@ const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone 
         }
 
         fetchContent()
-    }, [file, basePath])
+    }, [file, basePath, file.modifiedTime, file.link])
 
     if (loading) {
         return (

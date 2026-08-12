@@ -1,7 +1,7 @@
-require('dotenv').config({ path: '../.env' });
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const fs = require('fs');
 const { getContents: getGitHubContents, searchFiles: searchGitHubFiles, getFileContent: getGitHubFileContent } = require('./github');
 const { syncRepository, getLocalContents, getLocalFileContent, searchLocalFiles } = require('./sync');
@@ -32,8 +32,8 @@ app.get('/api/health', healthHandler);
 
 // POST /api/sync — Trigger live repository sync
 app.post('/api/sync', asyncHandler(async (req, res) => {
-    syncRepository().catch(err => console.error('Sync failed:', err.message));
-    res.json({ message: 'Repository sync initiated' });
+    await syncRepository();
+    res.json({ success: true, message: 'Repository synced successfully' });
 }));
 
 
@@ -124,7 +124,11 @@ function sendRawFile(req, res, filePath, data, contentType, isDownload = false) 
         res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
     }
 
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (['.md', '.txt', '.json', '.yml', '.yaml', '.html'].includes(ext) || req.query.t || req.query.v || req.query._t) {
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    } else {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
 
     // Handle HTTP Range header for streaming PDFs & videos reliably on Chrome / Safari / Edge
     const range = req.headers.range;

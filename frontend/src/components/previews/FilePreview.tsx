@@ -18,6 +18,7 @@ import VideoPlayer from './VideoPlayer'
 import AudioPlayer from './AudioPlayer'
 import CodePreview from './CodePreview'
 import NotebookPreview from './NotebookPreview'
+import MarkdownPreview from './MarkdownPreview'
 import Breadcrumb from '../Breadcrumb'
 import { PreviewContainer, DownloadBtnContainer } from './Containers'
 import { isCodeFile } from '../../utils/getPreviewType'
@@ -217,7 +218,8 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
     const isAudio = fileData?.mimeType?.startsWith('audio/') || /\.(mp3|wav|flac|ogg|m4a)$/i.test(fileNameLower)
     const isImage = fileData?.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i.test(fileNameLower)
     const isPDF = fileData?.mimeType === 'application/pdf' || fileNameLower.endsWith('.pdf')
-    const isCode = fileData ? (isCodeFile(fileData.name) || /\.(txt|md|json|js|jsx|ts|tsx|py|c|cpp|h|css|html|xml|yaml|yml|sh|java|cs|rs|go|php|rb|sql|env)$/i.test(fileNameLower)) : false
+    const isMarkdown = /\.(md|markdown)$/i.test(fileNameLower)
+    const isCode = fileData ? (isCodeFile(fileData.name) || /\.(txt|json|js|jsx|ts|tsx|py|c|cpp|h|css|html|xml|yaml|yml|sh|java|cs|rs|go|php|rb|sql|env)$/i.test(fileNameLower)) : false
     const isNotebook = fileNameLower.endsWith('.ipynb')
 
     const downloadUrl = fileData?.link || getPreviewUrl(fileData?.path || location.pathname)
@@ -326,8 +328,9 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
             )
         }
 
-
-
+        if (isMarkdown) {
+            return <MarkdownPreview file={fileData} basePath={location.pathname} standalone={true} />
+        }
 
         if (isNotebook) {
             return <NotebookPreview fileUrl={downloadUrl} fileName={name} />

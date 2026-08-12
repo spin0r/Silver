@@ -1,5 +1,6 @@
-const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const fs = require('fs');
 const { Octokit } = require('@octokit/rest');
 
 const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
@@ -102,6 +103,10 @@ async function syncRepository() {
     let skippedCount = 0;
     const fileIndexMap = {};
 
+    const existingIndex = fs.existsSync(INDEX_FILE)
+      ? (() => { try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8')); } catch(e) { return {}; } })()
+      : {};
+
     for (const item of files) {
       const relPath = item.path;
       const localPath = path.join(STORAGE_DIR, relPath);
@@ -114,10 +119,6 @@ async function syncRepository() {
       let exists = false;
       if (fs.existsSync(localPath)) {
         const stats = fs.statSync(localPath);
-        // Compare by SHA if available, otherwise by size
-        const existingIndex = fs.existsSync(INDEX_FILE)
-          ? (() => { try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8')); } catch(e) { return {}; } })()
-          : {};
         const cached = existingIndex[relPath];
         if (cached && cached.sha === item.sha) {
           exists = true;
@@ -129,9 +130,10 @@ async function syncRepository() {
       if (exists) {
         skippedCount++;
       } else {
-        const rawUrl = `https://raw.githubusercontent.com/${getOwner()}/${getRepo()}/${getBranch()}/${encodeURIComponent(relPath).replace(/%2F/g, '/')}`;
+        const cacheBuster = item.sha ? `?v=${item.sha}` : `?t=${Date.now()}`;
+        const rawUrl = `https://raw.githubusercontent.com/${getOwner()}/${getRepo()}/${getBranch()}/${encodeURIComponent(relPath).replace(/%2F/g, '/')}${cacheBuster}`;
         try {
-          const res = await fetch(rawUrl, { headers });
+          const res = await fetch(rawUrl, { headers, cache: 'no-store' });
           if (res.ok) {
             const ab = await res.arrayBuffer();
             fs.writeFileSync(localPath, Buffer.from(ab));
@@ -158,6 +160,7 @@ async function syncRepository() {
     console.log(`✅ Local Repository Sync Complete! Downloaded: ${downloadedCount}, Up to date: ${skippedCount}, Deleted: ${deletedCount}. Total files indexed: ${Object.keys(fileIndexMap).length}`);
   } catch (error) {
     console.error(`❌ Sync error:`, error.message);
+    throw error;
   }
 }
 
@@ -234,7 +237,7 @@ function getLocalContents(dirPath = '') {
         name: entry.name,
         type: 'file',
         size: stats.size,
-        downloadUrl: `/${encodeURIComponent(itemRelPath).replace(/%2F/g, '/')}`,
+        downloadUrl: `/api/raw?path=${encodeURIComponent(itemRelPath)}`,
 
         sha: metadata.sha || itemRelPath,
         path: itemRelPath,
@@ -317,9 +320,7 @@ function searchLocalFiles(query) {
         size: item.size,
         sha: item.sha,
         path: item.path,
-        downloadUrl: `/${item.path}`
-
-
+        downloadUrl: `/api/raw?path=${encodeURIComponent(item.path)}`
       });
     }
   }
