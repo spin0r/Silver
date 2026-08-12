@@ -52,11 +52,13 @@ const FileListing = () => {
         try {
             const data = await fetchFolderContents(path)
 
+            const fetchedFiles = (data.data?.files || []).filter(f => f.name !== '.gitkeep')
+
             if (pageToken) {
-                setFiles(prev => [...prev, ...(data.data?.files || [])])
+                setFiles(prev => [...prev, ...fetchedFiles])
                 setPageIndex(prev => prev + 1)
             } else {
-                setFiles(data.data?.files || [])
+                setFiles(fetchedFiles)
             }
 
             setNextPageToken(data.nextPageToken || null)

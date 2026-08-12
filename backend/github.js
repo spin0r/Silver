@@ -58,7 +58,8 @@ async function getContents(dirPath = '') {
       ref: getBranch()
     });
 
-    const items = Array.isArray(response.data) ? response.data : [response.data];
+    const items = (Array.isArray(response.data) ? response.data : [response.data])
+      .filter(item => item.name !== '.gitkeep');
     
     // Fetch last commit dates in parallel (with concurrency limit)
     const BATCH_SIZE = 10;
@@ -173,6 +174,7 @@ async function searchFiles(query) {
     // Search through both files and directories
     const matches = tree.filter(item => {
       const name = path.basename(item.path).toLowerCase();
+      if (name === '.gitkeep') return false;
       const fullPath = item.path.toLowerCase();
       return name.includes(lowerQuery) || fullPath.includes(lowerQuery);
     });

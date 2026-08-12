@@ -207,7 +207,8 @@ function getLocalContents(dirPath = '') {
     throw err;
   }
 
-  const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+  const entries = fs.readdirSync(targetDir, { withFileTypes: true })
+    .filter(entry => entry.name !== '.gitkeep');
   const indexMap = fs.existsSync(INDEX_FILE) ? JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8')) : {};
 
   return entries.map(entry => {
@@ -308,6 +309,7 @@ function searchLocalFiles(query) {
 
   for (const relPath of Object.keys(indexMap)) {
     const item = indexMap[relPath];
+    if (!item || item.name === '.gitkeep') continue;
     if (item.name.toLowerCase().includes(lower) || item.path.toLowerCase().includes(lower)) {
       results.push({
         name: item.name,
