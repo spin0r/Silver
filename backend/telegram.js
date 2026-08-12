@@ -183,8 +183,17 @@ async function handleTelegramCommand(chatId, text) {
             let githubMsg = '';
 
             if (process.env.GITHUB_TOKEN) {
-                await commitFileToGitHub(`${cleanFolderPath}/.gitkeep`, Buffer.from(''));
-                githubMsg = `\n🐙 <b>GitHub Repo:</b> Created in <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
+                try {
+                    await commitFileToGitHub(`${cleanFolderPath}/.gitkeep`, Buffer.from(''));
+                    githubMsg = `\n🐙 <b>GitHub Repo:</b> Created in <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
+                } catch (githubErr) {
+                    console.error('⚠️ GitHub mkdir failed:', githubErr.message);
+                    if (githubErr.message.includes('Resource not accessible')) {
+                        githubMsg = `\n⚠️ <b>GitHub Error:</b> Token lacks Write permission.\n💡 <i>Grant "Contents: Read & write" in GitHub Token settings!</i>`;
+                    } else {
+                        githubMsg = `\n⚠️ <b>GitHub Error:</b> <code>${githubErr.message}</code>`;
+                    }
+                }
             } else {
                 githubMsg = `\n⚠️ <b>GitHub Token missing:</b> Created locally`;
             }
@@ -316,8 +325,17 @@ async function handleTelegramFileUpload(chatId, message) {
 
         let githubNote = '';
         if (process.env.GITHUB_TOKEN) {
-            await commitFileToGitHub(targetName, buffer);
-            githubNote = `\n🐙 <b>GitHub Repo:</b> Committed directly to <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
+            try {
+                await commitFileToGitHub(targetName, buffer);
+                githubNote = `\n🐙 <b>GitHub Repo:</b> Committed directly to <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
+            } catch (githubErr) {
+                console.error('⚠️ GitHub commit failed:', githubErr.message);
+                if (githubErr.message.includes('Resource not accessible')) {
+                    githubNote = `\n⚠️ <b>GitHub Error:</b> Token lacks Write permission.\n💡 <i>Grant "Contents: Read & write" in GitHub Token settings!</i>`;
+                } else {
+                    githubNote = `\n⚠️ <b>GitHub Error:</b> <code>${githubErr.message}</code>`;
+                }
+            }
         } else {
             githubNote = `\n⚠️ <b>GitHub Token missing:</b> Saved to local disk`;
         }
