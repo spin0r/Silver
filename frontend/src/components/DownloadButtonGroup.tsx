@@ -2,6 +2,7 @@ import { Fragment, useRef, useState } from 'react'
 import { Menu, Transition } from '@headlessui/react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import toast from 'react-hot-toast'
+import { triggerDownload, getFolderZipUrl } from '../utils/api'
 
 interface DownloadButtonGroupProps {
     downloadUrl?: string
@@ -16,7 +17,7 @@ interface DownloadButtonGroupProps {
 
 export default function DownloadButtonGroup({
     downloadUrl = '',
-    fileName: _fileName = '',
+    fileName = '',
     onGenerateLinkClick,
 
     onRenameClick,
@@ -72,15 +73,19 @@ export default function DownloadButtonGroup({
 
         return (
             <div className="flex flex-nowrap justify-center gap-2 overflow-x-auto">
-                {!isFolder && (
-                    <button
-                        onClick={() => window.open(downloadUrl, '_blank')}
-                        className={`${baseBtnClass} ${colorMap.blue}`}
-                    >
-                        <FontAwesomeIcon icon="file-download" />
-                        <span>Download</span>
-                    </button>
-                )}
+                <button
+                    onClick={() => {
+                        if (isFolder) {
+                            triggerDownload(getFolderZipUrl(downloadUrl || fileName), `${fileName || 'folder'}.zip`)
+                        } else {
+                            triggerDownload(downloadUrl, fileName)
+                        }
+                    }}
+                    className={`${baseBtnClass} ${colorMap.blue}`}
+                >
+                    <FontAwesomeIcon icon="file-download" />
+                    <span>{isFolder ? 'Download ZIP' : 'Download'}</span>
+                </button>
                 <button
                     onClick={() => copyToClipboard(getFullUrl())}
                     className={`${baseBtnClass} ${colorMap.pink}`}
@@ -143,25 +148,27 @@ export default function DownloadButtonGroup({
                     >
                         <Menu.Items className={`absolute right-0 w-48 origin-top-right divide-y divide-gray-100 rounded-md bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:bg-[#18181B] dark:divide-gray-700 dark:ring-gray-700 z-50 ${menuPosition === 'up' ? 'bottom-full mb-2 origin-bottom-right' : 'mt-2 origin-top-right'}`}>
                             <div className="px-1 py-1">
-                                {!isFolder && (
-                                    <Menu.Item>
-                                        {({ active }) => (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault()
-                                                    e.stopPropagation()
-                                                    window.open(downloadUrl, '_blank')
-                                                    close()
-                                                }}
-                                                className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''
-                                                    } text-gray-900 dark:text-gray-100 group flex w-full items-center rounded-md px-2 py-2 text-sm`}
-                                            >
-                                                <FontAwesomeIcon icon="file-download" className="mr-2 h-4 w-4" />
-                                                Download
-                                            </button>
-                                        )}
-                                    </Menu.Item>
-                                )}
+                                <Menu.Item>
+                                    {({ active }) => (
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault()
+                                                e.stopPropagation()
+                                                if (isFolder) {
+                                                    triggerDownload(getFolderZipUrl(downloadUrl || fileName), `${fileName || 'folder'}.zip`)
+                                                } else {
+                                                    triggerDownload(downloadUrl, fileName)
+                                                }
+                                                close()
+                                            }}
+                                            className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                                                } text-gray-900 dark:text-gray-100 group flex w-full items-center rounded-md px-2 py-2 text-sm`}
+                                        >
+                                            <FontAwesomeIcon icon="file-download" className="mr-2 h-4 w-4" />
+                                            {isFolder ? 'Download ZIP' : 'Download'}
+                                        </button>
+                                    )}
+                                </Menu.Item>
                                 <Menu.Item>
                                     {({ active }) => (
                                         <button

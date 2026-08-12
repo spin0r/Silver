@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { getFileIcon, formatFileSize, extractEmojiFromFileName } from '../utils/fileIcons'
-import { getDownloadUrl, getPreviewUrl, isFolder, isPDF } from '../utils/api'
+import { getDownloadUrl, getPreviewUrl, isFolder, isPDF, triggerDownload, getFolderZipUrl } from '../utils/api'
 
 
 import type { DriveFile } from '../types'
@@ -112,32 +112,46 @@ const FileGridItem = ({
                         )}
                     </div>
 
-                    {/* Hover overlay with Preview and Download */}
+                    {/* Hover overlay with Preview and Download (ZIP for folders) */}
                     <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                        {!isFolder(file.mimeType) && (
+                        {isFolder(file.mimeType) ? (
                             <button
                                 onClick={(e) => {
+                                    e.stopPropagation()
                                     e.preventDefault()
-                                    onFileClick(file)
+                                    triggerDownload(getFolderZipUrl(file.path || file.name), `${file.name}.zip`)
                                 }}
                                 className="rounded-full bg-white/90 p-2 text-gray-900 hover:bg-white transition-colors"
-                                title="Preview"
-                            >
-                                <FontAwesomeIcon icon="eye" className="h-4 w-4" />
-                            </button>
-                        )}
-                        {!isFolder(file.mimeType) && (
-                            <a
-                                href={getFileDownloadUrl(file)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="rounded-full bg-white/90 p-2 text-gray-900 hover:bg-white transition-colors"
-                                title="Download"
+                                title="Download Folder as ZIP"
                             >
                                 <FontAwesomeIcon icon={['far', 'circle-down']} className="h-4 w-4" />
-
-                            </a>
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        onFileClick(file)
+                                    }}
+                                    className="rounded-full bg-white/90 p-2 text-gray-900 hover:bg-white transition-colors"
+                                    title="Preview"
+                                >
+                                    <FontAwesomeIcon icon="eye" className="h-4 w-4" />
+                                </button>
+                                <a
+                                    href={getFileDownloadUrl(file)}
+                                    download={file.name}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        e.preventDefault()
+                                        triggerDownload(getFileDownloadUrl(file), file.name)
+                                    }}
+                                    className="rounded-full bg-white/90 p-2 text-gray-900 hover:bg-white transition-colors"
+                                    title="Download"
+                                >
+                                    <FontAwesomeIcon icon={['far', 'circle-down']} className="h-4 w-4" />
+                                </a>
+                            </>
                         )}
                     </div>
                 </div>

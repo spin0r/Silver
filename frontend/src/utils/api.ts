@@ -95,6 +95,41 @@ export function getPreviewUrl(path: string, filename?: string): string {
     return `/${decodeURIComponent(normalizedPath)}`;
 }
 
+export function getFolderZipUrl(path: string): string {
+    const clean = path.replace(/^\/?\d+:\/?/, '').replace(/\/+/g, '/').replace(/^\/+/, '');
+    return `${API_BASE}/zip?path=${encodeURIComponent(clean)}`;
+}
+
+export function getSelectedZipUrl(paths: string[], name: string = 'selected_files.zip'): string {
+    const cleanPaths = paths.map(p => p.replace(/^\/?\d+:\/?/, '').replace(/\/+/g, '/').replace(/^\/+/, ''));
+    return `${API_BASE}/zip/selected?paths=${encodeURIComponent(JSON.stringify(cleanPaths))}&name=${encodeURIComponent(name)}`;
+}
+
+export function triggerDownload(url: string, fileName?: string) {
+    if (!url) return
+    let downloadTargetUrl = url
+    try {
+        const parsed = new URL(url, window.location.origin)
+        parsed.searchParams.set('download', 'true')
+        downloadTargetUrl = parsed.toString()
+    } catch (e) {
+        if (!downloadTargetUrl.includes('download=true')) {
+            downloadTargetUrl += (downloadTargetUrl.includes('?') ? '&' : '?') + 'download=true'
+        }
+    }
+
+    const a = document.createElement('a')
+    a.href = downloadTargetUrl
+    if (fileName) {
+        a.download = fileName
+    } else {
+        a.setAttribute('download', '')
+    }
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+}
+
 
 
 

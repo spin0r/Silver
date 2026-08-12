@@ -64,7 +64,14 @@ const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone 
             </div>
             {/* Content */}
             <div className="markdown-body p-4">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                        a: ({ node, ...props }) => (
+                            <a {...props} target="_blank" rel="noopener noreferrer" />
+                        )
+                    }}
+                >
                     {content}
                 </ReactMarkdown>
             </div>

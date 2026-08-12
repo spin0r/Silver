@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, MouseEventHandler } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { getFileIcon, formatFileSize, formatDate, extractEmojiFromFileName } from '../utils/fileIcons'
-import { getDownloadUrl, getPreviewUrl, isFolder, isPDF } from '../utils/api'
+import { getDownloadUrl, getPreviewUrl, isFolder, isPDF, triggerDownload, getSelectedZipUrl, getFolderZipUrl } from '../utils/api'
 
 
 import type { DriveFile } from '../types'
@@ -133,8 +133,8 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
         return a.name.localeCompare(b.name)
     })
 
-    // Get non-folder files only
-    const selectableFiles = sortedFiles.filter(f => !isFolder(f.mimeType))
+    // All files and folders are selectable
+    const selectableFiles = sortedFiles
 
     // Calculate total selection state
     const getSelectionState = (): 0 | 1 | 2 => {
@@ -185,16 +185,21 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
         })
     }
 
-    // Download selected files (simple: open each in new tab)
+    // Download selected files (ZIP for multiple files or folders)
     const downloadSelectedFiles = () => {
         const selectedFiles = selectableFiles.filter(f => selected[f.id])
-        if (selectedFiles.length === 1) {
-            window.open(getFileDownloadUrl(selectedFiles[0]), '_blank')
+        if (selectedFiles.length === 0) return
+
+        if (selectedFiles.length === 1 && !isFolder(selectedFiles[0].mimeType)) {
+            triggerDownload(getFileDownloadUrl(selectedFiles[0]), selectedFiles[0].name)
+        } else if (selectedFiles.length === 1 && isFolder(selectedFiles[0].mimeType)) {
+            const folder = selectedFiles[0]
+            triggerDownload(getFolderZipUrl(folder.path || folder.name), `${folder.name}.zip`)
+            toast.success(`Starting ZIP download for ${folder.name}...`)
         } else {
-            selectedFiles.forEach(f => {
-                window.open(getFileDownloadUrl(f), '_blank')
-            })
-            toast.success(`Started download for ${selectedFiles.length} files`)
+            toast.success(`Generating ZIP for ${selectedFiles.length} selected item(s)...`)
+            const paths = selectedFiles.map(f => f.path || f.name)
+            triggerDownload(getSelectedZipUrl(paths, 'selected_files.zip'), 'selected_files.zip')
         }
     }
 
@@ -259,27 +264,21 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
     return (
         <div className="rounded bg-white shadow-sm dark:bg-[#18181B] dark:text-gray-100">
             {/* Header */}
-            <div className="grid grid-cols-12 items-center space-x-2 border-b border-gray-900/10 px-3 py-2 dark:border-gray-500/30">
-                <div className="col-span-12 text-xs font-bold uppercase tracking-widest text-gray-600 md:col-span-6 dark:text-gray-300">
-                    Name
+            <div className="grid grid-cols-12 items-center px-3 py-2 border-b border-gray-900/10 dark:border-gray-500/30">
+                <div className="col-span-12 md:col-span-10 grid grid-cols-10 items-center space-x-2">
+                    <div className="col-span-10 md:col-span-6 text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-300">
+                        Name
+                    </div>
+                    <div className="col-span-3 hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:block dark:text-gray-300">
+                        Last Modified
+                    </div>
+                    <div className="col-span-1 hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:block dark:text-gray-300">
+                        Size
+                    </div>
                 </div>
-                <div className="col-span-3 hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:block dark:text-gray-300">
-                    Last Modified
-                </div>
-                <div className="hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:block dark:text-gray-300">
-                    Size
-                </div>
-                <div className="hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:block dark:text-gray-300">
-                    Actions
-                </div>
-                <div className="hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:block dark:text-gray-300">
-                    <div className="hidden p-1.5 text-gray-700 md:flex dark:text-gray-400">
-                        <Checkbox
-                            checked={totalSelected}
-                            onChange={toggleAllSelected}
-                            title="Select files"
-                            indeterminate={true}
-                        />
+                {/* Header Action & Select Slots (Copy | Download | Checkbox) */}
+                <div className="hidden text-xs font-bold uppercase tracking-widest text-gray-600 md:flex md:col-span-2 items-center justify-end dark:text-gray-300">
+                    <div className="w-8 flex items-center justify-center">
                         <button
                             title="Copy selected files permalink"
                             className="cursor-pointer rounded p-1.5 hover:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent dark:hover:bg-gray-600 disabled:dark:text-gray-600 dark:disabled:hover:bg-transparent transition-colors"
@@ -288,6 +287,8 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
                         >
                             <FontAwesomeIcon icon={['far', 'copy']} className="h-4 w-4" />
                         </button>
+                    </div>
+                    <div className="w-8 flex items-center justify-center">
                         <button
                             title="Download selected files"
                             className="cursor-pointer rounded p-1.5 hover:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent dark:hover:bg-gray-600 disabled:dark:text-gray-600 dark:disabled:hover:bg-transparent transition-colors"
@@ -296,6 +297,14 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
                         >
                             <FontAwesomeIcon icon={['far', 'circle-down']} className="h-4 w-4" />
                         </button>
+                    </div>
+                    <div className="w-8 flex items-center justify-center">
+                        <Checkbox
+                            checked={totalSelected}
+                            onChange={toggleAllSelected}
+                            title="Select files"
+                            indeterminate={true}
+                        />
                     </div>
                 </div>
             </div>
@@ -313,7 +322,7 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
                 return (
                     <div
                         key={file.id}
-                        className="grid grid-cols-12 items-center transition-all duration-100 hover:bg-gray-100 dark:hover:bg-gray-850"
+                        className="grid grid-cols-12 items-center px-3 transition-all duration-100 hover:bg-gray-100 dark:hover:bg-gray-850"
                     >
 
                         {isPdfFile ? (
@@ -323,7 +332,7 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
                                 rel="noopener noreferrer"
                                 className="col-span-12 md:col-span-10"
                             >
-                                <div className="grid cursor-pointer grid-cols-10 items-center space-x-2 px-3 py-2.5">
+                                <div className="grid cursor-pointer grid-cols-10 items-center space-x-2 py-2.5">
                                     <div className="col-span-10 flex items-center space-x-2 truncate md:col-span-6" title={cleanName}>
                                         <FileHoverIcon file={file} isFolderItem={isFolderItem} emojiIcon={emoji} />
                                         <span className="truncate font-medium text-gray-900 dark:text-white">
@@ -343,7 +352,7 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
                                 to={targetUrl}
                                 className="col-span-12 md:col-span-10"
                             >
-                                <div className="grid cursor-pointer grid-cols-10 items-center space-x-2 px-3 py-2.5">
+                                <div className="grid cursor-pointer grid-cols-10 items-center space-x-2 py-2.5">
                                     <div className="col-span-10 flex items-center space-x-2 truncate md:col-span-6" title={cleanName}>
                                         <FileHoverIcon file={file} isFolderItem={isFolderItem} emojiIcon={emoji} />
                                         <span className="truncate font-medium text-gray-900 dark:text-white">
@@ -361,41 +370,61 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
 
                         )}
 
-                        {/* Actions column */}
-                        <div className="hidden p-1.5 text-gray-700 md:flex dark:text-gray-400">
-                            {!isFolderItem && (
+                        {/* Row Action & Select Slots (Preview/Spacer | Download/ZIP | Checkbox) */}
+                        <div className="hidden text-gray-700 md:flex md:col-span-2 items-center justify-end dark:text-gray-400">
+                            {isFolderItem ? (
                                 <>
-                                    <span
-                                        title="Preview file"
-                                        className="cursor-pointer rounded p-1.5 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                                        onClick={() => onFileClick(file)}
-                                    >
-                                        <FontAwesomeIcon icon="eye" className="h-4 w-4" />
-                                    </span>
-                                    <a
-                                        href={getFileDownloadUrl(file)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        title="Download file"
-                                        className="cursor-pointer rounded p-1.5 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <FontAwesomeIcon icon={['far', 'circle-down']} className="h-4 w-4" />
-                                    </a>
-
+                                    <div className="w-8 flex items-center justify-center" />
+                                    <div className="w-8 flex items-center justify-center">
+                                        <button
+                                            title="Download Folder ZIP"
+                                            className="cursor-pointer rounded p-1.5 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                e.preventDefault()
+                                                triggerDownload(getFolderZipUrl(file.path || file.name), `${file.name}.zip`)
+                                                toast.success(`Starting ZIP download for ${file.name}...`)
+                                            }}
+                                        >
+                                            <FontAwesomeIcon icon={['far', 'circle-down']} className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-8 flex items-center justify-center">
+                                        <span
+                                            title="Preview file"
+                                            className="cursor-pointer rounded p-1.5 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                            onClick={() => onFileClick(file)}
+                                        >
+                                            <FontAwesomeIcon icon="eye" className="h-4 w-4" />
+                                        </span>
+                                    </div>
+                                    <div className="w-8 flex items-center justify-center">
+                                        <a
+                                            href={getFileDownloadUrl(file)}
+                                            download={file.name}
+                                            title="Download file"
+                                            className="cursor-pointer rounded p-1.5 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                e.preventDefault()
+                                                triggerDownload(getFileDownloadUrl(file), file.name)
+                                            }}
+                                        >
+                                            <FontAwesomeIcon icon={['far', 'circle-down']} className="h-4 w-4" />
+                                        </a>
+                                    </div>
                                 </>
                             )}
-                        </div>
-
-                        {/* Checkbox column */}
-                        <div className="hidden p-1.5 text-gray-700 md:flex dark:text-gray-400">
-                            {!isFolderItem && (
+                            <div className="w-8 flex items-center justify-center">
                                 <Checkbox
                                     checked={selected[file.id] ? 2 : 0}
                                     onChange={() => toggleFileSelected(file.id)}
-                                    title="Select file"
+                                    title="Select item"
                                 />
-                            )}
+                            </div>
                         </div>
                     </div>
                 )

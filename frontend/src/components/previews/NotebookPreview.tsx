@@ -125,7 +125,16 @@ function NotebookCellView({ cell, language }: { cell: NotebookCell; language: st
                     prose-li:text-gray-300 prose-blockquote:text-gray-400
                     prose-table:text-gray-300 prose-th:text-gray-200
                     prose-td:border-gray-700 prose-th:border-gray-700">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{source}</ReactMarkdown>
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                            a: ({ node, ...props }) => (
+                                <a {...props} target="_blank" rel="noopener noreferrer" />
+                            )
+                        }}
+                    >
+                        {source}
+                    </ReactMarkdown>
                 </div>
             </div>
         )

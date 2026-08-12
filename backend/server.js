@@ -6,6 +6,7 @@ const fs = require('fs');
 const { getContents: getGitHubContents, searchFiles: searchGitHubFiles, getFileContent: getGitHubFileContent } = require('./github');
 const { syncRepository, getLocalContents, getLocalFileContent, searchLocalFiles } = require('./sync');
 const { startTelegramBot } = require('./telegram');
+const { buildFolderZip, buildSelectedPathsZip } = require('./zip');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -63,6 +64,44 @@ app.get('/api/search', asyncHandler(async (req, res) => {
         const results = await searchGitHubFiles(q);
         res.json(results);
     }
+}));
+
+// GET /api/zip — Download folder (or root folder if empty) as ZIP
+app.get('/api/zip', asyncHandler(async (req, res) => {
+    const dirPath = req.query.path || '';
+    const { buffer, filename } = await buildFolderZip(dirPath);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+}));
+
+// GET /api/zip/selected — Download multiple selected files/folders as ZIP (via GET)
+app.get('/api/zip/selected', asyncHandler(async (req, res) => {
+    let paths = [];
+    if (req.query.paths) {
+        try {
+            paths = JSON.parse(req.query.paths);
+        } catch (e) {
+            paths = String(req.query.paths).split(',');
+        }
+    }
+    const customName = req.query.name || 'selected_files.zip';
+    const { buffer, filename } = await buildSelectedPathsZip(paths, customName);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+}));
+
+// POST /api/zip/selected — Download multiple selected files/folders as ZIP (via POST)
+app.post('/api/zip/selected', asyncHandler(async (req, res) => {
+    const { paths = [], name = 'selected_files.zip' } = req.body || {};
+    const { buffer, filename } = await buildSelectedPathsZip(paths, name);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
 }));
 
 // Helper to serve raw file content with HTTP Range request support
@@ -170,7 +209,7 @@ app.get('/*.*', asyncHandler(async (req, res, next) => {
         } catch {
             fileInfo = await getGitHubFileContent(filePath);
         }
-        return sendRawFile(req, res, filePath, fileInfo.data, fileInfo.contentType);
+        return sendRawFile(req, res, filePath, fileInfo.data, fileInfo.contentType, req.query.download === 'true');
     } catch (err) {
         try {
             const sanitizedPath = String(filePath).replace(/^\/?\d+:\/?/, '').replace(/^\/+/, '');
@@ -186,7 +225,7 @@ app.get('/*.*', asyncHandler(async (req, res, next) => {
                 const buf = Buffer.from(ab);
                 const ext = path.extname(filePath).toLowerCase();
                 const contentType = ext === '.pdf' ? 'application/pdf' : (ghRes.headers.get('content-type') || 'application/octet-stream');
-                return sendRawFile(req, res, filePath, buf, contentType);
+                return sendRawFile(req, res, filePath, buf, contentType, req.query.download === 'true');
             }
         } catch (e) {}
         return next();
