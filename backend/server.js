@@ -53,6 +53,27 @@ function isIpBlocked(ip) {
     return false;
 }
 
+function getTokenFromReq(req) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    if (req.query?.token) return String(req.query.token);
+    if (req.query?.auth) return String(req.query.auth);
+
+    if (req.headers.cookie) {
+        const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+            const parts = cookie.trim().split('=');
+            const key = parts[0];
+            const val = parts.slice(1).join('=');
+            if (key && val) acc[key] = decodeURIComponent(val);
+            return acc;
+        }, {});
+        if (cookies.auth_token) return cookies.auth_token;
+    }
+    return null;
+}
+
 // Early IP Blocking Middleware for API routes (except health checks and static frontend UI)
 app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/api/health') {
@@ -99,6 +120,7 @@ app.post('/api/auth/login', (req, res) => {
         blockedIPs.delete(ip);
         const token = crypto.randomBytes(32).toString('hex');
         activeTokens.add(token);
+        res.setHeader('Set-Cookie', `auth_token=${token}; Path=/; SameSite=Lax; Max-Age=2592000`);
         return res.json({ success: true, token, attemptsLeft: MAX_ATTEMPTS, isBlocked: false });
     }
 
@@ -123,8 +145,7 @@ app.post('/api/auth/login', (req, res) => {
 
 // GET /api/auth/verify
 app.get('/api/auth/verify', (req, res) => {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token || req.query.auth);
+    const token = getTokenFromReq(req);
     const ip = getClientIp(req);
     const blocked = isIpBlocked(ip);
 
@@ -138,9 +159,9 @@ app.get('/api/auth/verify', (req, res) => {
 
 // POST /api/auth/logout
 app.post('/api/auth/logout', (req, res) => {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : req.body?.token;
+    const token = getTokenFromReq(req) || req.body?.token;
     if (token) activeTokens.delete(token);
+    res.setHeader('Set-Cookie', 'auth_token=; Path=/; Max-Age=0');
     res.json({ success: true });
 });
 
@@ -156,16 +177,27 @@ app.use((req, res, next) => {
                           req.path === '/favicon.svg' || 
                           req.path === '/icons.svg';
 
-    // Allow frontend SPA pages and static assets to load so the login UI can render
-    if (!isApiRoute && (isStaticAsset || !path.extname(req.path))) {
+    if (isStaticAsset) {
         return next();
     }
 
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token || req.query.auth);
+    const token = getTokenFromReq(req);
+    const isAuthenticated = Boolean(token && activeTokens.has(token));
 
-    if (token && activeTokens.has(token)) {
+    if (isAuthenticated) {
         return next();
+    }
+
+    // For unauthenticated requests to non-API routes (direct file URLs or SPA pages)
+    if (!isApiRoute) {
+        const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+        // If the browser navigation accepts HTML or isn't requesting a direct binary download
+        if (acceptsHtml || req.query.download !== 'true') {
+            const frontendDist = path.join(__dirname, '../frontend/dist');
+            if (fs.existsSync(path.join(frontendDist, 'index.html'))) {
+                return res.sendFile(path.join(frontendDist, 'index.html'));
+            }
+        }
     }
 
     return res.status(401).json({ error: 'Unauthorized: Login required' });
