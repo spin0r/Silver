@@ -32,12 +32,24 @@ export function clearFolderCache(targetPath?: string) {
     }
 }
 
+export function getAuthToken(): string | null {
+    return localStorage.getItem('auth_token')
+}
+
+export function getAuthHeaders(): HeadersInit {
+    const token = getAuthToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export async function triggerRepositorySync(): Promise<{ success: boolean; message: string }> {
     clearFolderCache()
     clearMarkdownCache()
     const response = await fetch(`${API_BASE}/sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        }
     })
 
     if (!response.ok) {
@@ -68,7 +80,9 @@ export async function fetchFolderContents(
         return cached.response
     }
 
-    const response = await fetch(`${API_BASE}/files?path=${encodeURIComponent(normalizedPath)}`)
+    const response = await fetch(`${API_BASE}/files?path=${encodeURIComponent(normalizedPath)}`, {
+        headers: getAuthHeaders()
+    })
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -76,6 +90,8 @@ export async function fetchFolderContents(
     }
 
     const data = await response.json()
+    const token = getAuthToken()
+    const authParam = token ? `&token=${encodeURIComponent(token)}` : ''
     
     // Map backend array to DriveFile array
     const files: DriveFile[] = data.map((item: any) => ({
@@ -84,7 +100,7 @@ export async function fetchFolderContents(
         mimeType: item.type === 'dir' ? 'application/vnd.google-apps.folder' : getMimeType(item.name),
         size: item.size ? item.size.toString() : '0',
         modifiedTime: item.modified,
-        link: item.downloadUrl || `${API_BASE}/raw?path=${encodeURIComponent(item.path)}`,
+        link: item.downloadUrl ? `${item.downloadUrl}${authParam}` : `${API_BASE}/raw?path=${encodeURIComponent(item.path)}${authParam}`,
         path: item.path
     }))
 
@@ -112,7 +128,9 @@ export async function searchFiles(
         return cached.response
     }
 
-    const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`)
+    const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, {
+        headers: getAuthHeaders()
+    })
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -120,14 +138,16 @@ export async function searchFiles(
     }
 
     const data = await response.json()
-    
+    const token = getAuthToken()
+    const authParam = token ? `&token=${encodeURIComponent(token)}` : ''
+
     const files: DriveFile[] = data.map((item: any) => ({
         id: item.sha || item.path,
         name: item.name,
         mimeType: item.type === 'dir' ? 'application/vnd.google-apps.folder' : getMimeType(item.name),
         size: item.size ? item.size.toString() : '0',
         modifiedTime: item.modified,
-        link: item.downloadUrl || `${API_BASE}/raw?path=${encodeURIComponent(item.path)}`,
+        link: item.downloadUrl ? `${item.downloadUrl}${authParam}` : `${API_BASE}/raw?path=${encodeURIComponent(item.path)}${authParam}`,
         path: item.path
     }))
 

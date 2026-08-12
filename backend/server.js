@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const crypto = require('crypto');
 const { getContents: getGitHubContents, searchFiles: searchGitHubFiles, getFileContent: getGitHubFileContent } = require('./github');
 const { syncRepository, getLocalContents, getLocalFileContent, searchLocalFiles } = require('./sync');
 const { startTelegramBot } = require('./telegram');
@@ -29,6 +30,125 @@ const healthHandler = (req, res) => {
 };
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+
+// --- AUTHENTICATION & IP BLOCKING LOGIC ---
+const activeTokens = new Set();
+const blockedIPs = new Set(); // IPs blocked after 2 failed attempts
+const loginAttempts = new Map(); // IP -> attempt count
+const MAX_ATTEMPTS = 2;
+
+function getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    const rawIp = forwarded ? String(forwarded).split(',')[0].trim() : (req.socket.remoteAddress || 'client');
+    return rawIp;
+}
+
+function isIpBlocked(ip) {
+    if (blockedIPs.has(ip)) return true;
+    const count = loginAttempts.get(ip) || 0;
+    if (count >= MAX_ATTEMPTS) {
+        blockedIPs.add(ip);
+        return true;
+    }
+    return false;
+}
+
+// Early IP Blocking Middleware for all API routes (except health checks)
+app.use((req, res, next) => {
+    if (req.path === '/health' || req.path === '/api/health') {
+        return next();
+    }
+    const ip = getClientIp(req);
+    if (isIpBlocked(ip)) {
+        return res.status(403).json({
+            error: 'Access Denied: Your IP address has been blocked due to 2 failed password attempts.',
+            isBlocked: true,
+            attemptsLeft: 0
+        });
+    }
+    next();
+});
+
+// POST /api/auth/login
+app.post('/api/auth/login', (req, res) => {
+    const ip = getClientIp(req);
+
+    if (isIpBlocked(ip)) {
+        return res.status(403).json({
+            error: 'Access Denied: Your IP address has been blocked due to 2 failed password attempts.',
+            isBlocked: true,
+            attemptsLeft: 0
+        });
+    }
+
+    const { password } = req.body || {};
+    const expectedPassword = process.env.SITE_PASSWORD !== undefined ? process.env.SITE_PASSWORD : 'admin';
+
+    if (password === expectedPassword) {
+        loginAttempts.delete(ip);
+        blockedIPs.delete(ip);
+        const token = crypto.randomBytes(32).toString('hex');
+        activeTokens.add(token);
+        return res.json({ success: true, token, attemptsLeft: MAX_ATTEMPTS, isBlocked: false });
+    }
+
+    const currentCount = (loginAttempts.get(ip) || 0) + 1;
+    loginAttempts.set(ip, currentCount);
+
+    if (currentCount >= MAX_ATTEMPTS) {
+        blockedIPs.add(ip);
+        return res.status(403).json({
+            error: 'Access Denied: Your IP address has been blocked after 2 failed password attempts.',
+            isBlocked: true,
+            attemptsLeft: 0
+        });
+    } else {
+        return res.status(401).json({
+            error: 'Incorrect password. 1 try remaining before IP block.',
+            attemptsLeft: MAX_ATTEMPTS - currentCount,
+            isBlocked: false
+        });
+    }
+});
+
+// GET /api/auth/verify
+app.get('/api/auth/verify', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token || req.query.auth);
+    const ip = getClientIp(req);
+    const blocked = isIpBlocked(ip);
+
+    const isValid = Boolean(token && activeTokens.has(token));
+    res.json({
+        authenticated: isValid,
+        isBlocked: blocked,
+        attemptsLeft: blocked ? 0 : (MAX_ATTEMPTS - (loginAttempts.get(ip) || 0))
+    });
+});
+
+// POST /api/auth/logout
+app.post('/api/auth/logout', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : req.body?.token;
+    if (token) activeTokens.delete(token);
+    res.json({ success: true });
+});
+
+// Auth protection middleware for API endpoints
+app.use((req, res, next) => {
+    if (req.path === '/health' || req.path === '/api/health' || req.path.startsWith('/api/auth/')) {
+        return next();
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token || req.query.auth);
+
+    if (token && activeTokens.has(token)) {
+        return next();
+    }
+
+    return res.status(401).json({ error: 'Unauthorized: Login required' });
+});
 
 // POST /api/sync — Trigger live repository sync
 app.post('/api/sync', asyncHandler(async (req, res) => {

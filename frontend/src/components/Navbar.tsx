@@ -4,8 +4,10 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import toast from 'react-hot-toast'
 import SearchModal from './SearchModal'
 import { parsePathInfo, triggerRepositorySync } from '../utils/api'
+import { useAuth } from '../context/AuthContext'
 
 const Navbar = () => {
+    const { logout } = useAuth()
     const [searchOpen, setSearchOpen] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
     const navigate = useNavigate()
@@ -208,6 +210,19 @@ const Navbar = () => {
                                 icon={isDark ? 'sun' : 'moon'}
                                 className="h-4 w-4"
                             />
+                        </button>
+
+                        {/* Logout Button */}
+                        <button
+                            onClick={async () => {
+                                await logout()
+                                toast.success('Logged out')
+                            }}
+                            title="Log out of repository"
+                            className="flex items-center space-x-1.5 rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                        >
+                            <FontAwesomeIcon icon="right-from-bracket" className="h-4 w-4" />
+                            <span className="hidden text-xs font-medium md:inline">Logout</span>
                         </button>
 
 
