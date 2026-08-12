@@ -8,6 +8,48 @@ const ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 let isSyncing = false;
 let pollingOffset = 0;
 
+// Per-chat current working directory session state
+const userCurrentDir = new Map();
+
+function getCurrentDir(chatId) {
+    return userCurrentDir.get(String(chatId)) || '';
+}
+
+function resolvePath(chatId, inputPath = '') {
+    const current = getCurrentDir(chatId);
+    let target = inputPath.trim().replace(/\\/g, '/');
+
+    if (!target || target === '/' || target.toLowerCase() === 'root' || target.toLowerCase() === '~') {
+        return '';
+    }
+
+    if (target === '..') {
+        if (!current) return '';
+        const parts = current.split('/');
+        parts.pop();
+        return parts.join('/');
+    }
+
+    if (target.startsWith('..')) {
+        const currentParts = current ? current.split('/') : [];
+        const inputParts = target.split('/');
+        for (const part of inputParts) {
+            if (part === '..') {
+                if (currentParts.length > 0) currentParts.pop();
+            } else if (part && part !== '.') {
+                currentParts.push(part);
+            }
+        }
+        return currentParts.join('/');
+    }
+
+    if (target.startsWith('/')) {
+        return target.replace(/^\/+/, '');
+    }
+
+    return current ? `${current}/${target}` : target;
+}
+
 /**
  * Send a message via Telegram Bot API
  */
@@ -56,7 +98,6 @@ function getFilenameFromCaption(caption, defaultName) {
         return defaultName;
     }
     let name = caption.trim();
-    // Preserve default extension if caption lacks one
     const defaultExt = path.extname(defaultName);
     const captionExt = path.extname(name);
     if (!captionExt && defaultExt) {
@@ -155,9 +196,11 @@ async function handleTelegramCommand(chatId, text) {
     if (command === '/start' || command === '/help') {
         const helpMsg = `🤖 <b>File Index Telegram Bot</b>\n\n` +
             `Available features & commands:\n` +
-            `• <b>Upload Files</b> - Send any file, document, photo, or video. Set caption to specify the filename or path in repo!\n` +
-            `• <b>/mkdir &lt;path&gt;</b> - Create a new folder directly in GitHub repo (e.g. <code>/mkdir Notes/Semester 1</code>)\n` +
-            `• <b>/ls [path]</b> - List contents of folders\n` +
+            `• <b>/cd &lt;folder&gt;</b> - Navigate to a directory (e.g. <code>/cd Notes/IT Law</code> or <code>/cd ..</code> or <code>/cd /</code>)\n` +
+            `• <b>/pwd</b> - Show current working directory\n` +
+            `• <b>Upload Files</b> - Send any document/photo/video. Saves directly into your active <code>/cd</code> folder!\n` +
+            `• <b>/mkdir &lt;path&gt;</b> - Create a new folder (e.g. <code>/mkdir Unit 1</code>)\n` +
+            `• <b>/ls [path]</b> - List contents of current or target folder\n` +
             `• <b>/sync</b> - Trigger live sync from GitHub repository\n` +
             `• <b>/stats</b> - View current index statistics\n` +
             `• <b>/help</b> - Show this help message`;
@@ -165,43 +208,41 @@ async function handleTelegramCommand(chatId, text) {
         return;
     }
 
+    if (command === '/cd' || command === '/chdir') {
+        const targetArg = text.trim().substring(command.length).trim();
+        const newDir = resolvePath(chatId, targetArg);
+        userCurrentDir.set(String(chatId), newDir);
+
+        const display = newDir ? `<code>${newDir}</code>` : '<code>root (/)</code>';
+        await sendTelegramMessage(chatId, `📂 <b>Working directory changed to:</b> ${display}`);
+        return;
+    }
+
+    if (command === '/pwd') {
+        const current = getCurrentDir(chatId);
+        const display = current ? `<code>${current}</code>` : '<code>root (/)</code>';
+        await sendTelegramMessage(chatId, `📍 <b>Current Working Directory:</b> ${display}`);
+        return;
+    }
+
     if (command === '/mkdir' || command === '/createfolder' || command === '/folder') {
-        const folderPath = text.trim().substring(command.length).trim();
-        if (!folderPath) {
+        const folderArg = text.trim().substring(command.length).trim();
+        if (!folderArg) {
             await sendTelegramMessage(chatId, '⚠️ Please specify a folder name or path.\nExample: <code>/mkdir Notes/Semester 1</code>');
             return;
         }
 
         try {
             const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
-            const cleanFolderPath = folderPath.replace(/\\/g, '/').replace(/^\/+/, '');
+            const cleanFolderPath = resolvePath(chatId, folderArg);
             const fullDirPath = path.join(STORAGE_DIR, cleanFolderPath);
 
             fs.mkdirSync(fullDirPath, { recursive: true });
 
-            const branch = process.env.GITHUB_BRANCH || 'main';
-            let githubMsg = '';
-
-            if (process.env.GITHUB_TOKEN) {
-                try {
-                    await commitFileToGitHub(`${cleanFolderPath}/.gitkeep`, Buffer.from(''));
-                    githubMsg = `\n🐙 <b>GitHub Repo:</b> Created in <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
-                } catch (githubErr) {
-                    console.error('⚠️ GitHub mkdir failed:', githubErr.message);
-                    if (githubErr.message.includes('Resource not accessible')) {
-                        githubMsg = `\n⚠️ <b>GitHub Error:</b> Token lacks Write permission.\n💡 <i>Grant "Contents: Read & write" in GitHub Token settings!</i>`;
-                    } else {
-                        githubMsg = `\n⚠️ <b>GitHub Error:</b> <code>${githubErr.message}</code>`;
-                    }
-                }
-            } else {
-                githubMsg = `\n⚠️ <b>GitHub Token missing:</b> Created locally`;
-            }
-
             // Sync index
             await syncRepository();
 
-            await sendTelegramMessage(chatId, `📁 <b>Folder Created Successfully!</b> 🎉\n\nPath: <code>${cleanFolderPath}</code>${githubMsg}`);
+            await sendTelegramMessage(chatId, `📁 <b>Folder Created Successfully!</b> 🎉\n\nPath: <code>${cleanFolderPath}</code>`);
         } catch (err) {
             await sendTelegramMessage(chatId, `❌ Failed to create folder: <code>${err.message}</code>`);
         }
@@ -209,15 +250,16 @@ async function handleTelegramCommand(chatId, text) {
     }
 
     if (command === '/ls' || command === '/list') {
-        const dirRel = text.trim().substring(command.length).trim();
+        const arg = text.trim().substring(command.length).trim();
+        const targetDir = arg ? resolvePath(chatId, arg) : getCurrentDir(chatId);
         try {
             const { getLocalContents } = require('./sync');
-            const items = getLocalContents(dirRel);
+            const items = getLocalContents(targetDir);
             if (items.length === 0) {
-                await sendTelegramMessage(chatId, `📂 Folder <code>${dirRel || 'root'}</code> is empty.`);
+                await sendTelegramMessage(chatId, `📂 Folder <code>${targetDir || 'root'}</code> is empty.`);
                 return;
             }
-            let listText = `📂 <b>Contents of <code>${dirRel || 'root'}</code></b> (${items.length} items):\n\n`;
+            let listText = `📂 <b>Contents of <code>${targetDir || 'root'}</code></b> (${items.length} items):\n\n`;
             for (const item of items) {
                 const icon = item.type === 'dir' ? '📁' : '📄';
                 listText += `${icon} <code>${item.name}</code>\n`;
@@ -240,7 +282,11 @@ async function handleTelegramCommand(chatId, text) {
             }
             const sizeMB = (totalBytes / (1024 * 1024)).toFixed(2);
 
+            const current = getCurrentDir(chatId);
+            const dirDisplay = current ? `<code>${current}</code>` : '<code>root (/)</code>';
+
             const statsMsg = `📊 <b>File Index Statistics</b>\n\n` +
+                `📍 Active Dir: ${dirDisplay}\n` +
                 `📦 Repository: <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code>\n` +
                 `🌿 Branch: <code>${process.env.GITHUB_BRANCH || 'main'}</code>\n` +
                 `📄 Total Indexed Files: <b>${fileCount}</b>\n` +
@@ -314,10 +360,19 @@ async function handleTelegramFileUpload(chatId, message) {
 
     if (!fileId) return;
 
-    // Use caption if provided (the caption will be the filename)
-    const targetName = getFilenameFromCaption(message.caption, defaultName);
+    // Use caption if provided, else use defaultName
+    const parsedFilename = getFilenameFromCaption(message.caption, defaultName);
 
-    await sendTelegramMessage(chatId, `📥 <b>Downloading file & pushing to GitHub...</b>\nTarget path: <code>${targetName}</code>`);
+    // Resolve target path relative to user's active /cd directory
+    let targetPath;
+    if (parsedFilename.includes('/') || parsedFilename.startsWith('/')) {
+        targetPath = resolvePath(chatId, parsedFilename);
+    } else {
+        const currentDir = getCurrentDir(chatId);
+        targetPath = currentDir ? `${currentDir}/${parsedFilename}` : parsedFilename;
+    }
+
+    await sendTelegramMessage(chatId, `📥 <b>Downloading file & pushing to GitHub...</b>\nTarget path: <code>${targetPath}</code>`);
 
     try {
         const buffer = await downloadTelegramFile(fileId);
@@ -326,7 +381,7 @@ async function handleTelegramFileUpload(chatId, message) {
         let githubNote = '';
         if (process.env.GITHUB_TOKEN) {
             try {
-                await commitFileToGitHub(targetName, buffer);
+                await commitFileToGitHub(targetPath, buffer);
                 githubNote = `\n🐙 <b>GitHub Repo:</b> Committed directly to <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
             } catch (githubErr) {
                 console.error('⚠️ GitHub commit failed:', githubErr.message);
@@ -341,7 +396,7 @@ async function handleTelegramFileUpload(chatId, message) {
         }
 
         // Save locally & sync index
-        const stats = saveFileToLocalAndIndex(targetName, buffer);
+        const stats = saveFileToLocalAndIndex(targetPath, buffer);
         await syncRepository();
 
         const sizeFormatted = (stats.size / (1024 * 1024)).toFixed(2) + ' MB';
