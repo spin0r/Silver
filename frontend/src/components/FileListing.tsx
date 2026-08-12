@@ -102,7 +102,7 @@ const FileListing = () => {
 
     return (
         <>
-            <div className="mx-auto max-w-6xl px-4 py-4">
+            <div className="mx-auto max-w-6xl px-4 py-4 pb-8 sm:pb-4">
                 {/* Header with breadcrumb and layout toggle */}
                 <div className="mb-4 flex items-center justify-between">
                     <Breadcrumb />
