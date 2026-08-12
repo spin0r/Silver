@@ -10,6 +10,8 @@ interface MarkdownPreviewProps {
     standalone?: boolean
 }
 
+const markdownTextCache = new Map<string, string>()
+
 const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone = true }) => {
     const [content, setContent] = useState<string>('')
     const [loading, setLoading] = useState(true)
@@ -17,16 +19,23 @@ const MarkdownPreview: FC<MarkdownPreviewProps> = ({ file, basePath, standalone 
 
     useEffect(() => {
         const fetchContent = async () => {
+            const url = file.link || `${basePath}${file.name}`
+            
+            if (markdownTextCache.has(url)) {
+                setContent(markdownTextCache.get(url)!)
+                setLoading(false)
+                return
+            }
+
             setLoading(true)
             setError(null)
             try {
-                // Construct the URL to fetch the README content
-                const url = file.link || `${basePath}${file.name}`
                 const response = await fetch(url)
                 if (!response.ok) {
                     throw new Error(`Failed to fetch: ${response.status}`)
                 }
                 const text = await response.text()
+                markdownTextCache.set(url, text)
                 setContent(text)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load content')

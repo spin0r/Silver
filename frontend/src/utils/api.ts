@@ -14,13 +14,38 @@ export function parsePathInfo(pathname: string): { drive: number; path: string }
     return { drive: 0, path: cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath }
 }
 
+// Client-side cache to save Render.com bandwidth (5-minute TTL)
+const folderCache = new Map<string, { response: FolderListResponse; timestamp: number }>()
+const searchCache = new Map<string, { response: SearchResponse; timestamp: number }>()
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes TTL
+
+export function clearFolderCache(targetPath?: string) {
+    if (targetPath) {
+        let normalizedPath = targetPath.replace(/^\/?\d+:\/?/, '')
+        if (normalizedPath.startsWith('/')) normalizedPath = normalizedPath.substring(1)
+        folderCache.delete(normalizedPath || 'ROOT')
+    } else {
+        folderCache.clear()
+        searchCache.clear()
+    }
+}
+
 export async function fetchFolderContents(
     path: string,
+    forceRefresh = false
 ): Promise<FolderListResponse> {
     // Strip drive prefix like 0:/ or 0: if present
     let normalizedPath = path.replace(/^\/?\d+:\/?/, '')
     if (normalizedPath.startsWith('/')) {
         normalizedPath = normalizedPath.substring(1)
+    }
+
+    const cacheKey = normalizedPath || 'ROOT'
+    const cached = folderCache.get(cacheKey)
+    const now = Date.now()
+
+    if (!forceRefresh && cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+        return cached.response
     }
 
     const response = await fetch(`${API_BASE}/files?path=${encodeURIComponent(normalizedPath)}`)
@@ -43,18 +68,30 @@ export async function fetchFolderContents(
         path: item.path
     }))
 
-    return {
+    const result: FolderListResponse = {
         nextPageToken: null,
         curPageIndex: 0,
         data: {
             files
         }
     }
+
+    folderCache.set(cacheKey, { response: result, timestamp: now })
+    return result
 }
 
 export async function searchFiles(
     query: string,
+    forceRefresh = false
 ): Promise<SearchResponse> {
+    const cacheKey = query.trim().toLowerCase()
+    const cached = searchCache.get(cacheKey)
+    const now = Date.now()
+
+    if (!forceRefresh && cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+        return cached.response
+    }
+
     const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`)
 
     if (!response.ok) {
@@ -74,13 +111,14 @@ export async function searchFiles(
         path: item.path
     }))
 
-
-
-    return {
+    const result: SearchResponse = {
         nextPageToken: null,
         curPageIndex: 0,
         data: { files }
     }
+
+    searchCache.set(cacheKey, { response: result, timestamp: now })
+    return result
 }
 
 export function getDownloadUrl(path: string, filename?: string): string {
