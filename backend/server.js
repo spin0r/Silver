@@ -53,11 +53,21 @@ function isIpBlocked(ip) {
     return false;
 }
 
-// Early IP Blocking Middleware for all API routes (except health checks)
+// Early IP Blocking Middleware for API routes (except health checks and static frontend UI)
 app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/api/health') {
         return next();
     }
+    const isApiRoute = req.path.startsWith('/api/');
+    const isStaticAsset = req.path.startsWith('/assets/') || 
+                          req.path === '/favicon.ico' || 
+                          req.path === '/favicon.svg' || 
+                          req.path === '/icons.svg';
+
+    if (!isApiRoute && (isStaticAsset || !path.extname(req.path))) {
+        return next();
+    }
+
     const ip = getClientIp(req);
     if (isIpBlocked(ip)) {
         return res.status(403).json({
@@ -134,9 +144,20 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ success: true });
 });
 
-// Auth protection middleware for API endpoints
+// Auth protection middleware for API endpoints and repo raw files
 app.use((req, res, next) => {
     if (req.path === '/health' || req.path === '/api/health' || req.path.startsWith('/api/auth/')) {
+        return next();
+    }
+
+    const isApiRoute = req.path.startsWith('/api/');
+    const isStaticAsset = req.path.startsWith('/assets/') || 
+                          req.path === '/favicon.ico' || 
+                          req.path === '/favicon.svg' || 
+                          req.path === '/icons.svg';
+
+    // Allow frontend SPA pages and static assets to load so the login UI can render
+    if (!isApiRoute && (isStaticAsset || !path.extname(req.path))) {
         return next();
     }
 
