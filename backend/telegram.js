@@ -30,6 +30,116 @@ async function sendTelegramMessage(chatId, text) {
 }
 
 /**
+ * Download a file from Telegram API by file_id
+ */
+async function downloadTelegramFile(fileId) {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const res = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+    const data = await res.json();
+    if (!data.ok || !data.result || !data.result.file_path) {
+        throw new Error(data.description || 'Failed to get file path from Telegram');
+    }
+    const downloadUrl = `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
+    const fileRes = await fetch(downloadUrl);
+    if (!fileRes.ok) {
+        throw new Error(`Failed to download file from Telegram (${fileRes.status})`);
+    }
+    const arrayBuffer = await fileRes.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Clean & determine target filename/filepath from caption or default file_name
+ */
+function getFilenameFromCaption(caption, defaultName) {
+    if (!caption || !caption.trim()) {
+        return defaultName;
+    }
+    let name = caption.trim();
+    // Preserve default extension if caption lacks one
+    const defaultExt = path.extname(defaultName);
+    const captionExt = path.extname(name);
+    if (!captionExt && defaultExt) {
+        name += defaultExt;
+    }
+    return name;
+}
+
+/**
+ * Save file to local storage directory and update file_index.json
+ */
+function saveFileToLocalAndIndex(relPath, buffer) {
+    const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
+    const INDEX_FILE = path.join(__dirname, 'data', 'file_index.json');
+
+    const cleanRelPath = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
+    const fullPath = path.join(STORAGE_DIR, cleanRelPath);
+    const dir = path.dirname(fullPath);
+
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(fullPath, buffer);
+
+    let indexMap = {};
+    if (fs.existsSync(INDEX_FILE)) {
+        try {
+            indexMap = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8'));
+        } catch (e) {}
+    }
+
+    const stats = fs.statSync(fullPath);
+    indexMap[cleanRelPath] = {
+        name: path.basename(cleanRelPath),
+        path: cleanRelPath,
+        size: stats.size,
+        modified: new Date().toISOString()
+    };
+
+    fs.writeFileSync(INDEX_FILE, JSON.stringify(indexMap, null, 2), 'utf-8');
+    return { fullPath, cleanRelPath, size: stats.size };
+}
+
+/**
+ * Commit uploaded file to GitHub repository on target branch (default 'main')
+ */
+async function commitFileToGitHub(relPath, buffer) {
+    if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_OWNER || !process.env.GITHUB_REPO) {
+        throw new Error('GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO environment variables are missing');
+    }
+    const { Octokit } = require('@octokit/rest');
+    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+    const owner = process.env.GITHUB_OWNER;
+    const repo = process.env.GITHUB_REPO;
+    const branch = process.env.GITHUB_BRANCH || 'main';
+
+    let sha;
+    try {
+        const existing = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: relPath,
+            ref: branch
+        });
+        if (existing.data && !Array.isArray(existing.data)) {
+            sha = existing.data.sha;
+        }
+    } catch (e) {}
+
+    await octokit.rest.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: relPath,
+        message: `Upload ${path.basename(relPath)} via Telegram Bot`,
+        content: buffer.toString('base64'),
+        branch,
+        ...(sha ? { sha } : {})
+    });
+    return true;
+}
+
+/**
  * Handle incoming Telegram bot command
  */
 async function handleTelegramCommand(chatId, text) {
@@ -44,11 +154,69 @@ async function handleTelegramCommand(chatId, text) {
 
     if (command === '/start' || command === '/help') {
         const helpMsg = `🤖 <b>File Index Telegram Bot</b>\n\n` +
-            `Available commands:\n` +
+            `Available features & commands:\n` +
+            `• <b>Upload Files</b> - Send any file, document, photo, or video. Set caption to specify the filename or path in repo!\n` +
+            `• <b>/mkdir &lt;path&gt;</b> - Create a new folder directly in GitHub repo (e.g. <code>/mkdir Notes/Semester 1</code>)\n` +
+            `• <b>/ls [path]</b> - List contents of folders\n` +
             `• <b>/sync</b> - Trigger live sync from GitHub repository\n` +
             `• <b>/stats</b> - View current index statistics\n` +
             `• <b>/help</b> - Show this help message`;
         await sendTelegramMessage(chatId, helpMsg);
+        return;
+    }
+
+    if (command === '/mkdir' || command === '/createfolder' || command === '/folder') {
+        const folderPath = text.trim().substring(command.length).trim();
+        if (!folderPath) {
+            await sendTelegramMessage(chatId, '⚠️ Please specify a folder name or path.\nExample: <code>/mkdir Notes/Semester 1</code>');
+            return;
+        }
+
+        try {
+            const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
+            const cleanFolderPath = folderPath.replace(/\\/g, '/').replace(/^\/+/, '');
+            const fullDirPath = path.join(STORAGE_DIR, cleanFolderPath);
+
+            fs.mkdirSync(fullDirPath, { recursive: true });
+
+            const branch = process.env.GITHUB_BRANCH || 'main';
+            let githubMsg = '';
+
+            if (process.env.GITHUB_TOKEN) {
+                await commitFileToGitHub(`${cleanFolderPath}/.gitkeep`, Buffer.from(''));
+                githubMsg = `\n🐙 <b>GitHub Repo:</b> Created in <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
+            } else {
+                githubMsg = `\n⚠️ <b>GitHub Token missing:</b> Created locally`;
+            }
+
+            // Sync index
+            await syncRepository();
+
+            await sendTelegramMessage(chatId, `📁 <b>Folder Created Successfully!</b> 🎉\n\nPath: <code>${cleanFolderPath}</code>${githubMsg}`);
+        } catch (err) {
+            await sendTelegramMessage(chatId, `❌ Failed to create folder: <code>${err.message}</code>`);
+        }
+        return;
+    }
+
+    if (command === '/ls' || command === '/list') {
+        const dirRel = text.trim().substring(command.length).trim();
+        try {
+            const { getLocalContents } = require('./sync');
+            const items = getLocalContents(dirRel);
+            if (items.length === 0) {
+                await sendTelegramMessage(chatId, `📂 Folder <code>${dirRel || 'root'}</code> is empty.`);
+                return;
+            }
+            let listText = `📂 <b>Contents of <code>${dirRel || 'root'}</code></b> (${items.length} items):\n\n`;
+            for (const item of items) {
+                const icon = item.type === 'dir' ? '📁' : '📄';
+                listText += `${icon} <code>${item.name}</code>\n`;
+            }
+            await sendTelegramMessage(chatId, listText);
+        } catch (err) {
+            await sendTelegramMessage(chatId, `❌ Error listing directory: <code>${err.message}</code>`);
+        }
         return;
     }
 
@@ -109,6 +277,69 @@ async function handleTelegramCommand(chatId, text) {
 }
 
 /**
+ * Handle incoming Telegram file / media uploads
+ */
+async function handleTelegramFileUpload(chatId, message) {
+    if (ALLOWED_CHAT_ID && String(chatId) !== String(ALLOWED_CHAT_ID)) {
+        await sendTelegramMessage(chatId, '⚠️ <b>Unauthorized access.</b>');
+        return;
+    }
+
+    let fileId, defaultName;
+    if (message.document) {
+        fileId = message.document.file_id;
+        defaultName = message.document.file_name || 'document_' + Date.now();
+    } else if (message.photo && message.photo.length > 0) {
+        fileId = message.photo[message.photo.length - 1].file_id;
+        defaultName = `photo_${Date.now()}.jpg`;
+    } else if (message.video) {
+        fileId = message.video.file_id;
+        defaultName = message.video.file_name || `video_${Date.now()}.mp4`;
+    } else if (message.audio) {
+        fileId = message.audio.file_id;
+        defaultName = message.audio.file_name || `audio_${Date.now()}.mp3`;
+    } else if (message.voice) {
+        fileId = message.voice.file_id;
+        defaultName = `voice_${Date.now()}.ogg`;
+    }
+
+    if (!fileId) return;
+
+    // Use caption if provided (the caption will be the filename)
+    const targetName = getFilenameFromCaption(message.caption, defaultName);
+
+    await sendTelegramMessage(chatId, `📥 <b>Downloading file & pushing to GitHub...</b>\nTarget path: <code>${targetName}</code>`);
+
+    try {
+        const buffer = await downloadTelegramFile(fileId);
+        const branch = process.env.GITHUB_BRANCH || 'main';
+
+        let githubNote = '';
+        if (process.env.GITHUB_TOKEN) {
+            await commitFileToGitHub(targetName, buffer);
+            githubNote = `\n🐙 <b>GitHub Repo:</b> Committed directly to <code>${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}</code> (branch: <code>${branch}</code>)`;
+        } else {
+            githubNote = `\n⚠️ <b>GitHub Token missing:</b> Saved to local disk`;
+        }
+
+        // Save locally & sync index
+        const stats = saveFileToLocalAndIndex(targetName, buffer);
+        await syncRepository();
+
+        const sizeFormatted = (stats.size / (1024 * 1024)).toFixed(2) + ' MB';
+        const successMsg = `✅ <b>File Uploaded & Pushed to GitHub Repository!</b> 🎉\n\n` +
+            `📄 File: <code>${path.basename(stats.cleanRelPath)}</code>\n` +
+            `📁 Path: <code>${stats.cleanRelPath}</code>\n` +
+            `💾 Size: <b>${sizeFormatted}</b>` + githubNote;
+
+        await sendTelegramMessage(chatId, successMsg);
+    } catch (err) {
+        console.error('❌ Upload error:', err.message);
+        await sendTelegramMessage(chatId, `❌ <b>Upload Failed!</b>\nError: <code>${err.message}</code>`);
+    }
+}
+
+/**
  * Start Telegram bot polling loop
  */
 async function startTelegramBot() {
@@ -142,9 +373,20 @@ async function startTelegramBot() {
             if (data.ok && Array.isArray(data.result)) {
                 for (const update of data.result) {
                     pollingOffset = update.update_id + 1;
-                    if (update.message && update.message.text) {
-                        handleTelegramCommand(update.message.chat.id, update.message.text)
-                            .catch(err => console.error('Error handling Telegram command:', err.message));
+                    if (update.message) {
+                        const msg = update.message;
+                        const chatId = msg.chat.id;
+
+                        // Handle files/photos/documents/audio/video uploads
+                        if (msg.document || msg.photo || msg.video || msg.audio || msg.voice) {
+                            handleTelegramFileUpload(chatId, msg)
+                                .catch(err => console.error('Error handling Telegram file upload:', err.message));
+                        }
+                        // Handle text commands
+                        else if (msg.text) {
+                            handleTelegramCommand(chatId, msg.text)
+                                .catch(err => console.error('Error handling Telegram command:', err.message));
+                        }
                     }
                 }
             }
