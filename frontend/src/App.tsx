@@ -1,6 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
-import Footer from './components/Footer'
 import FileListing from './components/FileListing'
 import LoginPage from './components/LoginPage'
 import Loading from './components/Loading'
@@ -27,7 +26,6 @@ function AppContent() {
             <Route path="/*" element={<LoginPage />} />
           </Routes>
         </main>
-        <Footer />
       </div>
     )
   }
@@ -43,8 +41,6 @@ function AppContent() {
           <Route path="/*" element={<FileListing />} />
         </Routes>
       </main>
-
-      <Footer />
     </div>
   )
 }
