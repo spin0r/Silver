@@ -24,12 +24,14 @@ function addLocalToZip(zip, localPath, zipFolderPrefix = '') {
   const stats = fs.statSync(localPath);
 
   if (stats.isFile()) {
+    if (path.basename(localPath) === '.gitkeep') return false;
     const fileData = fs.readFileSync(localPath);
     zip.file(zipFolderPrefix, fileData);
     return true;
   } else if (stats.isDirectory()) {
     const entries = fs.readdirSync(localPath, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name === '.gitkeep') continue;
       const entryLocalPath = path.join(localPath, entry.name);
       const entryZipPath = zipFolderPrefix ? `${zipFolderPrefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
@@ -49,10 +51,12 @@ function addLocalToZip(zip, localPath, zipFolderPrefix = '') {
  */
 async function addRemotePathToZip(zip, relPath, zipFolderPrefix = '') {
   const sanitizedPath = cleanPath(relPath);
+  if (path.basename(sanitizedPath) === '.gitkeep') return;
   try {
     const fileInfo = await getGitHubFileContent(sanitizedPath);
     if (fileInfo && fileInfo.data) {
       const filename = path.basename(sanitizedPath);
+      if (filename === '.gitkeep') return;
       const entryZipPath = zipFolderPrefix ? `${zipFolderPrefix}/${filename}` : filename;
       zip.file(entryZipPath, fileInfo.data);
       return;
@@ -61,6 +65,7 @@ async function addRemotePathToZip(zip, relPath, zipFolderPrefix = '') {
     try {
       const contents = await getGitHubContents(sanitizedPath);
       for (const item of contents) {
+        if (item.name === '.gitkeep') continue;
         const itemZipPath = zipFolderPrefix ? `${zipFolderPrefix}/${item.name}` : item.name;
         if (item.type === 'dir') {
           await addRemotePathToZip(zip, item.path, itemZipPath);
@@ -84,12 +89,14 @@ async function addRemotePathToZip(zip, relPath, zipFolderPrefix = '') {
  */
 async function addPathToZip(zip, relPath, zipFolderPrefix = '') {
   const sanitizedPath = cleanPath(relPath);
+  if (path.basename(sanitizedPath) === '.gitkeep') return;
   const localPath = sanitizedPath ? path.join(STORAGE_DIR, sanitizedPath) : STORAGE_DIR;
   
   if (fs.existsSync(localPath)) {
     const stats = fs.statSync(localPath);
     if (stats.isFile()) {
       const filename = path.basename(sanitizedPath);
+      if (filename === '.gitkeep') return;
       const targetZipPath = zipFolderPrefix || filename;
       zip.file(targetZipPath, fs.readFileSync(localPath));
     } else if (stats.isDirectory()) {
