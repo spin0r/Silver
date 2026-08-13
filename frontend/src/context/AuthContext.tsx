@@ -7,6 +7,7 @@ interface AuthContextType {
     attemptsLeft: number
     lockUntil: number
     isBlocked: boolean
+    passwordEnabled: boolean
     login: (password: string) => Promise<void>
     logout: () => Promise<void>
 }
@@ -19,6 +20,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [attemptsLeft, setAttemptsLeft] = useState<number>(2)
     const [lockUntil, setLockUntil] = useState<number>(0)
     const [isBlocked, setIsBlocked] = useState<boolean>(false)
+    const [passwordEnabled, setPasswordEnabled] = useState<boolean>(true)
 
     const checkAuth = async () => {
         setLoading(true)
@@ -28,7 +30,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
             const res = await fetch(url, { headers })
             const data = await res.json()
-            setIsAuthenticated(Boolean(data.authenticated))
+            // If the server has disabled the password system, skip auth entirely
+            if (data.passwordEnabled === false) {
+                setPasswordEnabled(false)
+                setIsAuthenticated(true)
+            } else {
+                setPasswordEnabled(true)
+                setIsAuthenticated(Boolean(data.authenticated))
+            }
             setAttemptsLeft(data.attemptsLeft ?? 2)
             setLockUntil(data.lockUntil ?? 0)
             setIsBlocked(Boolean(data.isBlocked))
@@ -97,6 +106,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 attemptsLeft,
                 lockUntil,
                 isBlocked,
+                passwordEnabled,
                 login,
                 logout
             }}

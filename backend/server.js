@@ -32,6 +32,9 @@ app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
 // --- AUTHENTICATION & IP BLOCKING LOGIC ---
+// Set ENABLE_PASSWORD=false in .env to disable the password system entirely
+const PASSWORD_ENABLED = process.env.ENABLE_PASSWORD !== 'false';
+
 const activeTokens = new Set();
 const blockedIPs = new Set(); // IPs blocked after 2 failed attempts
 const loginAttempts = new Map(); // IP -> attempt count
@@ -76,6 +79,9 @@ function getTokenFromReq(req) {
 
 // Early IP Blocking Middleware for API routes (except health checks and static frontend UI)
 app.use((req, res, next) => {
+    // If password system is disabled, skip all IP-blocking checks
+    if (!PASSWORD_ENABLED) return next();
+
     if (req.path === '/health' || req.path === '/api/health') {
         return next();
     }
@@ -145,6 +151,16 @@ app.post('/api/auth/login', (req, res) => {
 
 // GET /api/auth/verify
 app.get('/api/auth/verify', (req, res) => {
+    // If password system is disabled, report as authenticated immediately
+    if (!PASSWORD_ENABLED) {
+        return res.json({
+            authenticated: true,
+            passwordEnabled: false,
+            isBlocked: false,
+            attemptsLeft: 2
+        });
+    }
+
     const token = getTokenFromReq(req);
     const ip = getClientIp(req);
     const blocked = isIpBlocked(ip);
@@ -152,6 +168,7 @@ app.get('/api/auth/verify', (req, res) => {
     const isValid = Boolean(token && activeTokens.has(token));
     res.json({
         authenticated: isValid,
+        passwordEnabled: true,
         isBlocked: blocked,
         attemptsLeft: blocked ? 0 : (MAX_ATTEMPTS - (loginAttempts.get(ip) || 0))
     });
@@ -167,6 +184,9 @@ app.post('/api/auth/logout', (req, res) => {
 
 // Auth protection middleware for API endpoints and repo raw files
 app.use((req, res, next) => {
+    // If password system is disabled, allow all requests through
+    if (!PASSWORD_ENABLED) return next();
+
     if (req.path === '/health' || req.path === '/api/health' || req.path.startsWith('/api/auth/')) {
         return next();
     }
@@ -440,6 +460,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, async () => {
     console.log(`✅ File Index server running on http://localhost:${PORT}`);
     console.log(`📦 Repo: ${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO} (${process.env.GITHUB_BRANCH || 'main'})`);
+    console.log(`🔒 Password system: ${PASSWORD_ENABLED ? 'ENABLED' : 'DISABLED (open access)'}`);
     
     // Perform initial repository sync in background
     syncRepository().catch(err => console.error('Sync failed:', err.message));
