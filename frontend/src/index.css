@@ -43,6 +43,27 @@
     backdrop-filter: blur(12px);
 }
 
+/* White right-to-left animated loading strip line for browser-style top loader */
+@keyframes strip-slide-rtl {
+    0% {
+        transform: translateX(250%);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+.animate-strip-line-white-rtl {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    background: #ffffff;
+    box-shadow: 0 0 12px 3px rgba(255, 255, 255, 0.95), 0 0 4px rgba(255, 255, 255, 1);
+    border-radius: 9999px;
+    animation: strip-slide-rtl 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Smooth transitions for all interactive elements */
 .transition-smooth {
     @apply transition-all duration-150 ease-in-out;

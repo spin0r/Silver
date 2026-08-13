@@ -402,12 +402,6 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
                             <DownloadButtonGroup
                                 downloadUrl={downloadUrl}
                                 fileName={fileData?.name || 'file'}
-                                onGenerateLinkClick={fileData?.id ? async () => {
-                                    
-                                    const url = ""
-                                    await navigator.clipboard.writeText(url)
-                                    toast.success('Expiring link copied to clipboard!')
-                                } : undefined}
                                 onRenameClick={window.UI?.enable_rename && fileData ? () => setRenameOpen(true) : undefined}
                                 layout="buttons"
                             />
@@ -423,12 +417,6 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
                         <DownloadButtonGroup
                             downloadUrl={downloadUrl}
                             fileName={fileData?.name || 'file'}
-                            onGenerateLinkClick={fileData?.id ? async () => {
-                                
-                                const url = ""
-                                await navigator.clipboard.writeText(url)
-                                toast.success('Expiring link copied to clipboard!')
-                            } : undefined}
                             onRenameClick={window.UI?.enable_rename && fileData ? () => setRenameOpen(true) : undefined}
                             layout="buttons"
                         />

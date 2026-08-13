@@ -7,7 +7,6 @@ import Breadcrumb from './Breadcrumb'
 import SwitchLayout from './SwitchLayout'
 import FileListView from './FileListView'
 import FileGridView from './FileGridView'
-import Loading from './Loading'
 import FilePreview from './previews/FilePreview'
 import MarkdownPreview from './previews/MarkdownPreview'
 import { formatFileSize } from '../utils/fileIcons'
@@ -42,7 +41,6 @@ const FileListing = () => {
     const fetchFiles = async (pageToken?: string, forceRefresh = false) => {
         if (!pageToken) {
             setLoading(true)
-            setFiles([])
             setPageIndex(0)
         } else {
             setLoadingMore(true)
@@ -114,6 +112,17 @@ const FileListing = () => {
 
     return (
         <>
+            {/* White loading strip line fixed at the very top of screen above header */}
+            <div className="fixed top-0 left-0 right-0 z-[100] h-[3px] overflow-hidden pointer-events-none">
+                <div
+                    className={`absolute inset-0 transition-opacity duration-300 ${
+                        loading ? 'opacity-100' : 'opacity-0'
+                    }`}
+                >
+                    <div className="animate-strip-line-white-rtl h-full rounded-full" />
+                </div>
+            </div>
+
             <div className="mx-auto max-w-6xl px-4 py-4 pb-8 sm:pb-4">
                 {/* Header with breadcrumb and layout toggle */}
                 <div className="mb-4 flex items-center justify-between">
@@ -123,8 +132,6 @@ const FileListing = () => {
 
                 {/* Content */}
                 <div className="rounded-lg border border-gray-200/50 bg-white shadow-sm dark:border-gray-700/50 dark:bg-[#18181B]">
-                    {loading && <Loading text="Loading folder contents..." />}
-
                     {error && (
                         <div className="py-20 text-center">
                             <FontAwesomeIcon icon="exclamation-triangle" className="mb-4 h-12 w-12 text-red-500" />
@@ -138,6 +145,13 @@ const FileListing = () => {
                         </div>
                     )}
 
+                    {loading && files.length === 0 && !error && (
+                        <div className="py-20 text-center">
+                            <div className="mx-auto mb-3 h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                            <div className="mx-auto h-4 w-32 animate-pulse rounded bg-gray-200/60 dark:bg-gray-800" />
+                        </div>
+                    )}
+
                     {!loading && !error && files.length === 0 && (
                         <div className="py-20 text-center">
                             <FontAwesomeIcon icon="folder-open" className="mb-4 h-12 w-12 text-gray-400" />
@@ -145,37 +159,25 @@ const FileListing = () => {
                         </div>
                     )}
 
-                    {!loading && !error && files.length > 0 && (
+                    {files.length > 0 && (
                         <>
-                            <Transition
-                                appear={true}
-                                show={true}
-                                key={layout + location.pathname}
-                                enter="transition duration-200 ease-out"
-                                enterFrom="opacity-0 translate-y-2"
-                                enterTo="opacity-100 translate-y-0"
-                                leave="transition duration-150 ease-in"
-                                leaveFrom="opacity-100 translate-y-0"
-                                leaveTo="opacity-0 translate-y-2"
-                            >
-                                <div>
-                                    {layout === 'list' ? (
-                                        <FileListView
-                                            files={files}
-                                            onFileClick={setSelectedFile}
-                                            onRenameSuccess={handleRename}
-                                            onDeleteSuccess={handleDelete}
-                                        />
-                                    ) : (
-                                        <FileGridView
-                                            files={files}
-                                            onFileClick={setSelectedFile}
-                                            onRenameSuccess={handleRename}
-                                            onDeleteSuccess={handleDelete}
-                                        />
-                                    )}
-                                </div>
-                            </Transition>
+                            <div className={`transition-opacity duration-200 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                                {layout === 'list' ? (
+                                    <FileListView
+                                        files={files}
+                                        onFileClick={setSelectedFile}
+                                        onRenameSuccess={handleRename}
+                                        onDeleteSuccess={handleDelete}
+                                    />
+                                ) : (
+                                    <FileGridView
+                                        files={files}
+                                        onFileClick={setSelectedFile}
+                                        onRenameSuccess={handleRename}
+                                        onDeleteSuccess={handleDelete}
+                                    />
+                                )}
+                            </div>
 
 
                             {/* Load more button */}

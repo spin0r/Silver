@@ -7,7 +7,6 @@ import { triggerDownload, getFolderZipUrl } from '../utils/api'
 interface DownloadButtonGroupProps {
     downloadUrl?: string
     fileName?: string
-    onGenerateLinkClick?: () => Promise<void>
     onRenameClick?: () => void
     color?: 'gray' | 'white'
     isFolder?: boolean
@@ -18,8 +17,6 @@ interface DownloadButtonGroupProps {
 export default function DownloadButtonGroup({
     downloadUrl = '',
     fileName = '',
-    onGenerateLinkClick,
-
     onRenameClick,
     color = 'gray',
     isFolder = false,
@@ -28,7 +25,6 @@ export default function DownloadButtonGroup({
 }: DownloadButtonGroupProps) {
     const [menuPosition, setMenuPosition] = useState<'up' | 'down'>('down')
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const [generatingLink, setGeneratingLink] = useState(false)
 
     const handleTriggerClick = () => {
         if (buttonRef.current) {
@@ -61,7 +57,7 @@ export default function DownloadButtonGroup({
         : "inline-flex w-full justify-center rounded-full p-2 text-sm font-medium text-gray-500 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:text-gray-400 dark:hover:bg-gray-800"
 
     if (layout === 'buttons') {
-        const baseBtnClass = "flex items-center space-x-2 rounded-lg border bg-white py-2 px-4 text-sm font-medium text-gray-900 whitespace-nowrap hover:bg-gray-100/10 focus:z-10 focus:ring-2 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
+        const baseBtnClass = "flex items-center space-x-2 rounded-lg border bg-white py-2 px-3 sm:px-4 text-xs sm:text-sm font-medium text-gray-900 whitespace-nowrap hover:bg-gray-100/10 focus:z-10 focus:ring-2 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
 
         const colorMap: Record<string, string> = {
             blue: 'hover:text-blue-600 focus:ring-blue-200 focus:text-blue-600 border-blue-300 dark:border-blue-700 dark:focus:ring-blue-500',
@@ -72,7 +68,7 @@ export default function DownloadButtonGroup({
         }
 
         return (
-            <div className="flex flex-nowrap justify-center gap-2 overflow-x-auto">
+            <div className="flex flex-wrap justify-center gap-2 max-w-full">
                 <button
                     onClick={() => {
                         if (isFolder) {
@@ -93,19 +89,6 @@ export default function DownloadButtonGroup({
                     <FontAwesomeIcon icon="copy" />
                     <span>{isFolder ? 'Copy Folder Link' : 'Copy Direct Link'}</span>
                 </button>
-                {onGenerateLinkClick && (
-                    <button
-                        onClick={async () => {
-                            setGeneratingLink(true)
-                            try { await onGenerateLinkClick() } finally { setGeneratingLink(false) }
-                        }}
-                        disabled={generatingLink}
-                        className={`${baseBtnClass} ${colorMap.teal}`}
-                    >
-                        <FontAwesomeIcon icon={generatingLink ? 'spinner' : 'link'} spin={generatingLink} />
-                        <span>{generatingLink ? 'Generating...' : 'Protected Link'}</span>
-                    </button>
-                )}
                 {onRenameClick && (
                     <button
                         onClick={onRenameClick}
@@ -187,50 +170,25 @@ export default function DownloadButtonGroup({
                                     )}
                                 </Menu.Item>
                             </div>
-                            {(onGenerateLinkClick || onRenameClick) && (
+                            {onRenameClick && (
                                 <div className="px-1 py-1">
-                                    {onGenerateLinkClick && (
-                                        <Menu.Item>
-                                            {({ active }) => (
-                                                <button
-                                                    onClick={async (e) => {
-                                                        e.preventDefault()
-                                                        e.stopPropagation()
-                                                        if (onGenerateLinkClick) {
-                                                            setGeneratingLink(true)
-                                                            try { await onGenerateLinkClick() } finally { setGeneratingLink(false) }
-                                                        }
-                                                        close()
-                                                    }}
-                                                    disabled={generatingLink}
-                                                    className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''
-                                                        } text-gray-900 dark:text-gray-100 group flex w-full items-center rounded-md px-2 py-2 text-sm`}
-                                                >
-                                                    <FontAwesomeIcon icon={generatingLink ? 'spinner' : 'link'} spin={generatingLink} className="mr-2 h-4 w-4" />
-                                                    {generatingLink ? 'Generating...' : 'Protected Link'}
-                                                </button>
-                                            )}
-                                        </Menu.Item>
-                                    )}
-                                    {onRenameClick && (
-                                        <Menu.Item>
-                                            {({ active }) => (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.preventDefault()
-                                                        e.stopPropagation()
-                                                        if (onRenameClick) onRenameClick()
-                                                        close()
-                                                    }}
-                                                    className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''
-                                                        } text-gray-900 dark:text-gray-100 group flex w-full items-center rounded-md px-2 py-2 text-sm`}
-                                                >
-                                                    <FontAwesomeIcon icon="edit" className="mr-2 h-4 w-4" />
-                                                    Rename
-                                                </button>
-                                            )}
-                                        </Menu.Item>
-                                    )}
+                                    <Menu.Item>
+                                        {({ active }) => (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault()
+                                                    e.stopPropagation()
+                                                    if (onRenameClick) onRenameClick()
+                                                    close()
+                                                }}
+                                                className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                                                    } text-gray-900 dark:text-gray-100 group flex w-full items-center rounded-md px-2 py-2 text-sm`}
+                                            >
+                                                <FontAwesomeIcon icon="edit" className="mr-2 h-4 w-4" />
+                                                Rename
+                                            </button>
+                                        )}
+                                    </Menu.Item>
                                 </div>
                             )}
                             {onDeleteClick && (
