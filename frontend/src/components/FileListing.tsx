@@ -119,7 +119,7 @@ const FileListing = () => {
                         loading ? 'opacity-100' : 'opacity-0'
                     }`}
                 >
-                    <div className="animate-strip-line-white-rtl h-full rounded-full" />
+                    <div className="animate-strip-line-white-ltr h-full rounded-full" />
                 </div>
             </div>
 
@@ -133,7 +133,7 @@ const FileListing = () => {
                 {/* Content */}
                 <div className="rounded-lg border border-gray-200/50 bg-white shadow-sm dark:border-gray-700/50 dark:bg-[#18181B]">
                     {error && (
-                        <div className="py-20 text-center">
+                        <div className="py-12 text-center">
                             <FontAwesomeIcon icon="exclamation-triangle" className="mb-4 h-12 w-12 text-red-500" />
                             <p className="text-gray-500">{error}</p>
                             <button
@@ -145,64 +145,65 @@ const FileListing = () => {
                         </div>
                     )}
 
-                    {loading && files.length === 0 && !error && (
-                        <div className="py-20 text-center">
-                            <div className="mx-auto mb-3 h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-                            <div className="mx-auto h-4 w-32 animate-pulse rounded bg-gray-200/60 dark:bg-gray-800" />
-                        </div>
-                    )}
-
-                    {!loading && !error && files.length === 0 && (
-                        <div className="py-20 text-center">
-                            <FontAwesomeIcon icon="folder-open" className="mb-4 h-12 w-12 text-gray-400" />
-                            <p className="text-gray-500">This folder is empty</p>
-                        </div>
-                    )}
-
-                    {files.length > 0 && (
-                        <>
-                            <div className={`transition-opacity duration-200 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-                                {layout === 'list' ? (
-                                    <FileListView
-                                        files={files}
-                                        onFileClick={setSelectedFile}
-                                        onRenameSuccess={handleRename}
-                                        onDeleteSuccess={handleDelete}
-                                    />
+                    {!error && (
+                        <Transition
+                            appear={true}
+                            show={!loading}
+                            key={location.pathname}
+                            enter="transition-opacity duration-200 ease-out"
+                            enterFrom="opacity-0"
+                            enterTo="opacity-100"
+                            leave="transition-opacity duration-150 ease-in"
+                            leaveFrom="opacity-100"
+                            leaveTo="opacity-0"
+                        >
+                            <div>
+                                {files.length === 0 ? (
+                                    <div className="py-12 text-center">
+                                        <FontAwesomeIcon icon="folder-open" className="mb-4 h-12 w-12 text-gray-400" />
+                                        <p className="text-gray-500">This folder is empty</p>
+                                    </div>
                                 ) : (
-                                    <FileGridView
-                                        files={files}
-                                        onFileClick={setSelectedFile}
-                                        onRenameSuccess={handleRename}
-                                        onDeleteSuccess={handleDelete}
-                                    />
+                                    layout === 'list' ? (
+                                        <FileListView
+                                            files={files}
+                                            onFileClick={setSelectedFile}
+                                            onRenameSuccess={handleRename}
+                                            onDeleteSuccess={handleDelete}
+                                        />
+                                    ) : (
+                                        <FileGridView
+                                            files={files}
+                                            onFileClick={setSelectedFile}
+                                            onRenameSuccess={handleRename}
+                                            onDeleteSuccess={handleDelete}
+                                        />
+                                    )
                                 )}
                             </div>
-
-
-                            {/* Load more button */}
-                            {nextPageToken && (
-                                <div className="border-t border-gray-200/50 p-4 text-center dark:border-gray-700/50">
-                                    <button
-                                        onClick={() => fetchFiles(nextPageToken)}
-                                        disabled={loadingMore}
-                                        className="inline-flex items-center space-x-2 rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-                                    >
-                                        {loadingMore ? (
-                                            <>
-                                                <FontAwesomeIcon icon="spinner" className="animate-spin" />
-                                                <span>Loading...</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FontAwesomeIcon icon="chevron-down" />
-                                                <span>Load more</span>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            )}
-                        </>
+                        </Transition>
+                    )}
+                    {/* Load more button */}
+                    {nextPageToken && (
+                        <div className="border-t border-gray-200/50 p-4 text-center dark:border-gray-700/50">
+                            <button
+                                onClick={() => fetchFiles(nextPageToken)}
+                                disabled={loadingMore}
+                                className="inline-flex items-center space-x-2 rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                            >
+                                {loadingMore ? (
+                                    <>
+                                        <FontAwesomeIcon icon="spinner" className="animate-spin" />
+                                        <span>Loading...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FontAwesomeIcon icon="chevron-down" />
+                                        <span>Load more</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     )}
                 </div>
 
