@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const crypto = require('crypto');
-const { getContents: getGitHubContents, searchFiles: searchGitHubFiles, getFileContent: getGitHubFileContent } = require('./github');
+const { getContents: getGitHubContents, searchFiles: searchGitHubFiles, getFileContent: getGitHubFileContent, saveFileToGitHub, deleteFileFromGitHub } = require('./github');
 const { syncRepository, getLocalContents, getLocalFileContent, searchLocalFiles } = require('./sync');
 const { startTelegramBot } = require('./telegram');
 const { buildFolderZip, buildSelectedPathsZip } = require('./zip');
@@ -13,7 +13,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Helper to handle async routes
 const asyncHandler = fn => (req, res, next) => {
@@ -182,8 +183,135 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ success: true });
 });
 
+// --- ADMIN MANAGEMENT (/main ROUTE) AUTH & EDITING API ---
+const activeAdminTokens = new Set();
+
+function getAdminTokenFromReq(req) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    if (req.query?.admin_token) return String(req.query.admin_token);
+    if (req.headers.cookie) {
+        const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+            const parts = cookie.trim().split('=');
+            const key = parts[0];
+            const val = parts.slice(1).join('=');
+            if (key && val) acc[key] = decodeURIComponent(val);
+            return acc;
+        }, {});
+        if (cookies.admin_token) return cookies.admin_token;
+    }
+    return null;
+}
+
+function requireAdminAuth(req, res, next) {
+    const token = getAdminTokenFromReq(req);
+    if (token && activeAdminTokens.has(token)) {
+        return next();
+    }
+    return res.status(401).json({ error: 'Unauthorized: Admin authentication required' });
+}
+
+// POST /api/admin/login
+app.post('/api/admin/login', (req, res) => {
+    const { username, password } = req.body || {};
+    const expectedUsername = process.env.ADMIN_USERNAME || 'admin';
+    const expectedPassword = process.env.ADMIN_PASSWORD || 'admin';
+
+    if (username === expectedUsername && password === expectedPassword) {
+        const adminToken = crypto.randomBytes(32).toString('hex');
+        activeAdminTokens.add(adminToken);
+        res.setHeader('Set-Cookie', `admin_token=${adminToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
+        return res.json({ success: true, token: adminToken });
+    }
+
+    return res.status(401).json({ error: 'Invalid admin username or password' });
+});
+
+// GET /api/admin/verify
+app.get('/api/admin/verify', (req, res) => {
+    const token = getAdminTokenFromReq(req);
+    const isValid = Boolean(token && activeAdminTokens.has(token));
+    res.json({ authenticated: isValid });
+});
+
+// POST /api/admin/logout
+app.post('/api/admin/logout', (req, res) => {
+    const token = getAdminTokenFromReq(req) || req.body?.token;
+    if (token) activeAdminTokens.delete(token);
+    res.setHeader('Set-Cookie', 'admin_token=; Path=/; Max-Age=0');
+    res.json({ success: true });
+});
+
+// GET /api/admin/file-content — Get raw text for editor
+app.get('/api/admin/file-content', requireAdminAuth, asyncHandler(async (req, res) => {
+    const filePath = req.query.path;
+    if (!filePath) {
+        return res.status(400).json({ error: 'Path parameter is required' });
+    }
+
+    const sanitizedPath = String(filePath).replace(/^\/?\d+:\/?/, '').replace(/^\/+/, '');
+    const localPath = path.join(STORAGE_DIR, sanitizedPath);
+
+    if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
+        const text = fs.readFileSync(localPath, 'utf-8');
+        return res.json({ path: sanitizedPath, content: text });
+    }
+
+    try {
+        const fileInfo = await getGitHubFileContent(sanitizedPath);
+        const text = fileInfo.data.toString('utf-8');
+        return res.json({ path: sanitizedPath, content: text });
+    } catch (e) {
+        return res.status(404).json({ error: 'File not found' });
+    }
+}));
+
+// POST /api/admin/save-file — Save or create file on GitHub & sync locally
+app.post('/api/admin/save-file', requireAdminAuth, asyncHandler(async (req, res) => {
+    const { path: filePath, content, commitMessage } = req.body || {};
+    if (!filePath) {
+        return res.status(400).json({ error: 'File path is required' });
+    }
+
+    const msg = commitMessage || `Update ${filePath} via web admin editor`;
+    await saveFileToGitHub(filePath, content || '', msg);
+    res.json({ success: true, message: `File '${filePath}' saved and committed to GitHub successfully!` });
+}));
+
+// POST /api/admin/upload-file — Upload binary file (PDF, images, zip, etc.) to GitHub
+app.post('/api/admin/upload-file', requireAdminAuth, asyncHandler(async (req, res) => {
+    const { path: filePath, base64Content, commitMessage } = req.body || {};
+    if (!filePath || !base64Content) {
+        return res.status(400).json({ error: 'File path and file content are required' });
+    }
+
+    const buffer = Buffer.from(base64Content, 'base64');
+    const msg = commitMessage || `Upload ${filePath} via web admin editor`;
+    await saveFileToGitHub(filePath, buffer, msg);
+    res.json({ success: true, message: `File '${filePath}' uploaded and committed to GitHub successfully!` });
+}));
+
+// POST /api/admin/delete-file — Delete file from GitHub & sync locally
+app.post('/api/admin/delete-file', requireAdminAuth, asyncHandler(async (req, res) => {
+    const { path: filePath, commitMessage } = req.body || {};
+    if (!filePath) {
+        return res.status(400).json({ error: 'File path is required' });
+    }
+
+    const msg = commitMessage || `Delete ${filePath} via web admin editor`;
+    await deleteFileFromGitHub(filePath, msg);
+    res.json({ success: true, message: `File '${filePath}' deleted successfully!` });
+}));
+
 // Auth protection middleware for API endpoints and repo raw files
 app.use((req, res, next) => {
+    // Skip auth for admin routes (they manage their own authentication)
+    if (req.path.startsWith('/api/admin/')) {
+        return next();
+    }
+
     // If password system is disabled, allow all requests through
     if (!PASSWORD_ENABLED) return next();
 

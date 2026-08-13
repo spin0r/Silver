@@ -3,13 +3,12 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import toast from 'react-hot-toast'
 import SearchModal from './SearchModal'
-import { parsePathInfo, triggerRepositorySync } from '../utils/api'
+import { parsePathInfo } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 
 const Navbar = () => {
     const { logout, passwordEnabled } = useAuth()
     const [searchOpen, setSearchOpen] = useState(false)
-    const [isSyncing, setIsSyncing] = useState(false)
     const navigate = useNavigate()
     const location = useLocation()
 
@@ -87,22 +86,6 @@ const Navbar = () => {
     const switchDrive = (driveIndex: number) => {
         setDriveMenuOpen(false)
         navigate(`/${driveIndex}:/`)
-    }
-
-    const handleSync = async () => {
-        if (isSyncing) return
-        setIsSyncing(true)
-        const toastId = toast.loading('Syncing...')
-        try {
-            await triggerRepositorySync()
-            toast.success('Synced successfully!', { id: toastId })
-            window.dispatchEvent(new CustomEvent('repoSynced'))
-        } catch (err: any) {
-            console.error('Sync error:', err)
-            toast.error(err.message || 'Failed to sync', { id: toastId })
-        } finally {
-            setIsSyncing(false)
-        }
     }
 
     return (
@@ -186,20 +169,6 @@ const Navbar = () => {
 
                     {/* Right side actions */}
                     <div className="flex items-center space-x-3">
-                        {/* Sync button */}
-                        <button
-                            onClick={handleSync}
-                            disabled={isSyncing}
-                            title="Sync files"
-                            className="flex items-center space-x-1.5 rounded-lg border border-gray-200/60 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-all hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700/60 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white disabled:opacity-50"
-                        >
-                            <FontAwesomeIcon
-                                icon="sync"
-                                className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}
-                            />
-                            <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync'}</span>
-                        </button>
-
                         {/* Theme Toggle */}
                         <button
                             title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}

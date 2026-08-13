@@ -4,6 +4,7 @@ import Footer from './components/Footer'
 import FileListing from './components/FileListing'
 import LoginPage from './components/LoginPage'
 import Loading from './components/Loading'
+import AdminPage from './components/AdminPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 function AppContent() {
@@ -21,7 +22,10 @@ function AppContent() {
     return (
       <div className="flex min-h-screen min-h-[100dvh] flex-col bg-gray-50 dark:bg-[#121214]">
         <main className="flex-1">
-          <LoginPage />
+          <Routes>
+            <Route path="/main" element={<AdminPage />} />
+            <Route path="/*" element={<LoginPage />} />
+          </Routes>
         </main>
         <Footer />
       </div>
@@ -34,6 +38,7 @@ function AppContent() {
 
       <main className="flex-1">
         <Routes>
+          <Route path="/main" element={<AdminPage />} />
           {/* Catch-all route for folder/file paths */}
           <Route path="/*" element={<FileListing />} />
         </Routes>

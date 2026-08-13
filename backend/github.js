@@ -298,6 +298,102 @@ async function getFileContent(filePath) {
 }
 
 /**
+ * Create or update a file on GitHub and sync to local storage
+ */
+async function saveFileToGitHub(filePath, content, message = 'Update file via web editor') {
+  const sanitizedPath = cleanPath(filePath);
+  const octokit = getOctokit();
+  const owner = getOwner();
+  const repo = getRepo();
+  const branch = getBranch();
+
+  let sha = undefined;
+  try {
+    const existing = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: sanitizedPath,
+      ref: branch
+    });
+    if (existing.data && existing.data.sha) {
+      sha = existing.data.sha;
+    }
+  } catch (e) {
+    // File does not exist yet
+  }
+
+  const contentBuffer = Buffer.isBuffer(content) ? content : Buffer.from(String(content), 'utf-8');
+  const base64Content = contentBuffer.toString('base64');
+
+  const response = await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path: sanitizedPath,
+    message,
+    content: base64Content,
+    sha,
+    branch
+  });
+
+  // Write directly to local disk cache so local reads update instantly
+  try {
+    const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
+    const localPath = path.join(STORAGE_DIR, sanitizedPath);
+    const dir = path.dirname(localPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(localPath, contentBuffer);
+  } catch (e) {
+    console.error('Failed to update local cache after save:', e.message);
+  }
+
+  return response.data;
+}
+
+/**
+ * Delete a file from GitHub and local storage
+ */
+async function deleteFileFromGitHub(filePath, message = 'Delete file via web editor') {
+  const sanitizedPath = cleanPath(filePath);
+  const octokit = getOctokit();
+  const owner = getOwner();
+  const repo = getRepo();
+  const branch = getBranch();
+
+  const existing = await octokit.rest.repos.getContent({
+    owner,
+    repo,
+    path: sanitizedPath,
+    ref: branch
+  });
+
+  if (!existing.data || !existing.data.sha) {
+    throw new Error('File not found on GitHub');
+  }
+
+  const response = await octokit.rest.repos.deleteFile({
+    owner,
+    repo,
+    path: sanitizedPath,
+    message,
+    sha: existing.data.sha,
+    branch
+  });
+
+  // Remove from local disk cache
+  try {
+    const STORAGE_DIR = path.join(__dirname, 'data', 'repo_files');
+    const localPath = path.join(STORAGE_DIR, sanitizedPath);
+    if (fs.existsSync(localPath)) {
+      fs.unlinkSync(localPath);
+    }
+  } catch (e) {}
+
+  return response.data;
+}
+
+/**
  * Construct raw GitHub URL for a file
  */
 function getRawUrl(filePath) {
@@ -309,5 +405,7 @@ module.exports = {
   searchFiles,
   getFileInfo,
   getFileContent,
-  getRawUrl
+  getRawUrl,
+  saveFileToGitHub,
+  deleteFileFromGitHub
 };
