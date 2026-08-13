@@ -29,18 +29,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const url = token ? `${API_BASE}/auth/verify?token=${encodeURIComponent(token)}` : `${API_BASE}/auth/verify`
             const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
             const res = await fetch(url, { headers })
+            if (!res.ok) {
+                throw new Error(`Verify returned ${res.status}`)
+            }
             const data = await res.json()
             // If the server has disabled the password system, skip auth entirely
             if (data.passwordEnabled === false) {
                 setPasswordEnabled(false)
                 setIsAuthenticated(true)
+                setIsBlocked(false)
+                setAttemptsLeft(2)
             } else {
                 setPasswordEnabled(true)
                 setIsAuthenticated(Boolean(data.authenticated))
+                setAttemptsLeft(data.attemptsLeft ?? 2)
+                setLockUntil(data.lockUntil ?? 0)
+                setIsBlocked(Boolean(data.isBlocked))
             }
-            setAttemptsLeft(data.attemptsLeft ?? 2)
-            setLockUntil(data.lockUntil ?? 0)
-            setIsBlocked(Boolean(data.isBlocked))
         } catch (err) {
             console.error('Failed to verify authentication status:', err)
             setIsAuthenticated(false)

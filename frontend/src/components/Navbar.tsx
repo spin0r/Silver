@@ -7,7 +7,7 @@ import { parsePathInfo, triggerRepositorySync } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
 
 const Navbar = () => {
-    const { logout } = useAuth()
+    const { logout, passwordEnabled } = useAuth()
     const [searchOpen, setSearchOpen] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
     const navigate = useNavigate()
@@ -92,14 +92,14 @@ const Navbar = () => {
     const handleSync = async () => {
         if (isSyncing) return
         setIsSyncing(true)
-        const toastId = toast.loading('Syncing with GitHub repository...')
+        const toastId = toast.loading('Syncing...')
         try {
             await triggerRepositorySync()
-            toast.success('Repository synced successfully!', { id: toastId })
+            toast.success('Synced successfully!', { id: toastId })
             window.dispatchEvent(new CustomEvent('repoSynced'))
         } catch (err: any) {
             console.error('Sync error:', err)
-            toast.error(err.message || 'Failed to sync repository', { id: toastId })
+            toast.error(err.message || 'Failed to sync', { id: toastId })
         } finally {
             setIsSyncing(false)
         }
@@ -190,7 +190,7 @@ const Navbar = () => {
                         <button
                             onClick={handleSync}
                             disabled={isSyncing}
-                            title="Sync files with GitHub repository"
+                            title="Sync files"
                             className="flex items-center space-x-1.5 rounded-lg border border-gray-200/60 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-all hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700/60 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white disabled:opacity-50"
                         >
                             <FontAwesomeIcon
@@ -212,7 +212,8 @@ const Navbar = () => {
                             />
                         </button>
 
-                        {/* Logout Button */}
+                        {/* Logout Button — only shown when password system is enabled */}
+                        {passwordEnabled && (
                         <button
                             onClick={async () => {
                                 await logout()
@@ -224,6 +225,7 @@ const Navbar = () => {
                             <FontAwesomeIcon icon="right-from-bracket" className="h-4 w-4" />
                             <span className="hidden text-xs font-medium md:inline">Logout</span>
                         </button>
+                        )}
 
 
 
