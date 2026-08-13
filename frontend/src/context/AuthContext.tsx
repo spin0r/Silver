@@ -15,15 +15,19 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
-    const [loading, setLoading] = useState<boolean>(true)
+    // Check if password was previously disabled — if so, skip the loading spinner entirely
+    const cachedPasswordDisabled = localStorage.getItem('passwordEnabled') === 'false'
+
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(cachedPasswordDisabled)
+    const [loading, setLoading] = useState<boolean>(!cachedPasswordDisabled)
     const [attemptsLeft, setAttemptsLeft] = useState<number>(2)
     const [lockUntil, setLockUntil] = useState<number>(0)
     const [isBlocked, setIsBlocked] = useState<boolean>(false)
-    const [passwordEnabled, setPasswordEnabled] = useState<boolean>(true)
+    const [passwordEnabled, setPasswordEnabled] = useState<boolean>(!cachedPasswordDisabled)
 
     const checkAuth = async () => {
-        setLoading(true)
+        // Only show loading spinner if we don't already know password is disabled
+        if (!cachedPasswordDisabled) setLoading(true)
         const token = getAuthToken()
         try {
             const url = token ? `${API_BASE}/auth/verify?token=${encodeURIComponent(token)}` : `${API_BASE}/auth/verify`
@@ -35,11 +39,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const data = await res.json()
             // If the server has disabled the password system, skip auth entirely
             if (data.passwordEnabled === false) {
+                localStorage.setItem('passwordEnabled', 'false')
                 setPasswordEnabled(false)
                 setIsAuthenticated(true)
                 setIsBlocked(false)
                 setAttemptsLeft(2)
             } else {
+                localStorage.setItem('passwordEnabled', 'true')
                 setPasswordEnabled(true)
                 setIsAuthenticated(Boolean(data.authenticated))
                 setAttemptsLeft(data.attemptsLeft ?? 2)
@@ -48,7 +54,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (err) {
             console.error('Failed to verify authentication status:', err)
-            setIsAuthenticated(false)
+            // If password was cached as disabled, keep the user in — don't kick them out on network error
+            if (!cachedPasswordDisabled) {
+                setIsAuthenticated(false)
+            }
         } finally {
             setLoading(false)
         }
@@ -99,6 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } catch (e) {}
         }
         localStorage.removeItem('auth_token')
+        localStorage.removeItem('passwordEnabled')
         setIsAuthenticated(false)
         clearFolderCache()
     }
