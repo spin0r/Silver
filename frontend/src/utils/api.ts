@@ -173,6 +173,20 @@ export function getPreviewUrl(path: string, filename?: string): string {
     return `/${decodeURIComponent(normalizedPath)}`;
 }
 
+export function getPdfRawUrl(path: string, filename?: string): string {
+    const fullPath = filename ? `${path}/${filename}` : path;
+    const normalizedPath = fullPath.replace(/^\/?\d+:\/?/, '').replace(/\/+/g, '/').replace(/^\/+/, '');
+    return `/${decodeURIComponent(normalizedPath)}?raw=true`;
+}
+
+export function getRawFileUrl(path: string, filename?: string): string {
+    const fullPath = filename ? `${path}/${filename}` : path;
+    const clean = fullPath.replace(/^\/?\d+:\/?/, '').replace(/\/+/g, '/').replace(/^\/+/, '');
+    const token = getAuthToken();
+    const authParam = token ? `&token=${encodeURIComponent(token)}` : '';
+    return `${API_BASE}/raw?path=${encodeURIComponent(clean)}${authParam}`;
+}
+
 export function getFolderZipUrl(path: string): string {
     const clean = path.replace(/^\/?\d+:\/?/, '').replace(/\/+/g, '/').replace(/^\/+/, '');
     return `${API_BASE}/zip?path=${encodeURIComponent(clean)}`;

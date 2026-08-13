@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, MouseEventHandler } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { getFileIcon, formatFileSize, formatDate, extractEmojiFromFileName } from '../utils/fileIcons'
-import { getDownloadUrl, getPreviewUrl, isFolder, isPDF, triggerDownload, getSelectedZipUrl, getFolderZipUrl } from '../utils/api'
+import { getDownloadUrl, getPreviewUrl, getPdfRawUrl, getRawFileUrl, isFolder, isPDF, triggerDownload, getSelectedZipUrl, getFolderZipUrl } from '../utils/api'
 
 
 import type { DriveFile } from '../types'
@@ -110,7 +110,7 @@ const FileListView = ({ files, onFileClick, onRenameSuccess, onDeleteSuccess }: 
         if (isFolderItem) {
             return `${normalized}/`.replace(/\/+/g, '/')
         }
-        if (isPDF(file.mimeType) || cleanPath.toLowerCase().endsWith('.pdf')) {
+        if (isPDF(file.mimeType) || (file.fileExtension || '').toLowerCase() === 'pdf' || cleanPath.toLowerCase().endsWith('.pdf')) {
             return getPreviewUrl(cleanPath)
         }
 

@@ -22,7 +22,7 @@ import MarkdownPreview from './MarkdownPreview'
 import Breadcrumb from '../Breadcrumb'
 import { PreviewContainer, DownloadBtnContainer } from './Containers'
 import { isCodeFile } from '../../utils/getPreviewType'
-import { getPreviewUrl } from '../../utils/api'
+import { getPreviewUrl, getPdfRawUrl, getRawFileUrl } from '../../utils/api'
 
 interface FilePreviewProps {
     file?: DriveFile
@@ -222,7 +222,7 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
     const isCode = fileData ? (isCodeFile(fileData.name) || /\.(txt|json|js|jsx|ts|tsx|py|c|cpp|h|css|html|xml|yaml|yml|sh|java|cs|rs|go|php|rb|sql|env)$/i.test(fileNameLower)) : false
     const isNotebook = fileNameLower.endsWith('.ipynb')
 
-    const downloadUrl = fileData?.link || getPreviewUrl(fileData?.path || location.pathname)
+    const downloadUrl = fileData?.link || getRawFileUrl(fileData?.path || location.pathname)
 
 
     const DefaultPreviewContent = () => {
@@ -296,6 +296,7 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
         }
 
         if (isPDF) {
+            const rawPdfUrl = getPdfRawUrl(fileData?.path || location.pathname)
             return (
                 <div className="flex flex-col space-y-2">
                     <div className="flex justify-end">
@@ -307,22 +308,12 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
                             <span>{pdfDark ? 'White PDF View' : 'Dark PDF View'}</span>
                         </button>
                     </div>
-                    <div
-                        className="h-[75vh] w-full overflow-hidden rounded-lg bg-[#121212] transition-all"
-                        style={pdfDark ? { filter: 'invert(0.92) hue-rotate(180deg) contrast(1.1)' } : undefined}
-                    >
-                        <object
-                            data={downloadUrl}
-                            type="application/pdf"
-                            className="h-full w-full"
+                    <div className="h-[75vh] w-full overflow-hidden rounded-lg bg-gray-900">
+                        <iframe
+                            src={rawPdfUrl}
+                            className={`h-full w-full border-0 transition-all ${pdfDark ? 'invert contrast-125' : ''}`}
                             title={name}
-                        >
-                            <iframe
-                                src={`${downloadUrl}#view=FitH`}
-                                className="h-full w-full"
-                                title={name}
-                            />
-                        </object>
+                        />
                     </div>
                 </div>
             )

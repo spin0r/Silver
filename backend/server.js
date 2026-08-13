@@ -576,8 +576,10 @@ app.get('/*.*', asyncHandler(async (req, res, next) => {
     }
 
     // If request comes from browser page navigation (Accept: text/html), serve SPA index.html
+    // UNLESS it's a direct PDF or media file link which should stream raw directly to browser native viewer
+    const isPdfOrMedia = /\.(pdf|png|jpg|jpeg|gif|webp|svg|mp4|webm|mp3|wav|zip)$/i.test(req.path);
     const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-    if (acceptsHtml && req.query.raw !== 'true' && req.query.download !== 'true') {
+    if (acceptsHtml && !isPdfOrMedia && req.query.raw !== 'true' && req.query.download !== 'true') {
         const frontendDist = path.join(__dirname, '../frontend/dist');
         if (fs.existsSync(path.join(frontendDist, 'index.html'))) {
             return res.sendFile(path.join(frontendDist, 'index.html'));
